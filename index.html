@@ -9,7 +9,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
-/* Весь твой оригинальный CSS стиль остается без изменений */
 :root {
   --primary: #1B5E20; --primary-light: #4CAF50; --primary-dark: #0D3311;
   --accent: #D32F2F; --bg: #F8F9FA; --surface: #FFFFFF;
@@ -18,48 +17,55 @@
 }
 .dark { --bg: #121212; --surface: #1E1E1E; --text: #ECEFF1; --text-secondary: #B0BEC5; --border: #37474F; }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); direction: rtl; padding-bottom: 85px; }
+body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); direction: rtl; padding-bottom: 85px; transition: 0.3s; }
+
 .header { position: sticky; top:0; z-index: 100; background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: 0 20px; height: 64px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-.header-title { font-size: 20px; font-weight: 800; }
+.header-title { font-size: 18px; font-weight: 800; }
+
 .auth-overlay { position: fixed; inset: 0; z-index: 2000; background: linear-gradient(135deg, #0D3311, #1B5E20); display: none; align-items: center; justify-content: center; padding: 22px; direction: ltr; }
-.auth-card { width: 100%; max-width: 390px; background: #fff; color: #1B1B1B; border-radius: 18px; padding: 24px; box-shadow: 0 18px 50px rgba(0,0,0,0.28); }
-.auth-card input { width: 100%; padding: 13px 14px; border: 1px solid #CFD8DC; border-radius: 12px; font-size: 15px; margin-bottom: 10px; outline: none; }
+.auth-card { width: 100%; max-width: 390px; background: #fff; color: #1B1B1B; border-radius: 18px; padding: 24px; box-shadow: 0 18px 50px rgba(0,0,0,0.28); text-align: center; }
+.auth-card input { width: 100%; padding: 13px; border: 1px solid #CFD8DC; border-radius: 12px; font-size: 16px; margin-bottom: 12px; outline: none; }
 .auth-card button { width: 100%; padding: 13px; border: none; border-radius: 12px; background: #1B5E20; color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; }
-.role-badge { flex: 0; min-width: 80px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12); color: #fff; border-radius: 999px; padding: 8px 10px; font-size: 11px; font-weight: 800; cursor: pointer; }
-/* ... (остальные стили из твоего оригинала) ... */
+
+.bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 75px; background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; z-index: 100; }
+.bottom-btn { flex: 1; display: flex; flex-direction: column; align-items: center; background: none; border: none; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.bottom-btn.active { color: var(--primary); font-weight: 800; }
+
+.btn { width: 100%; padding: 15px; border-radius: var(--radius); border: none; background: var(--primary); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+.record-card { background: var(--surface); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); border-right: 6px solid var(--primary); }
 </style>
 </head>
 <body>
 
 <div id="loginOverlay" class="auth-overlay">
   <div class="auth-card">
-    <h2>Login</h2>
-    <p>Use your role account to open the app.</p>
-    <input id="loginUser" autocomplete="username" placeholder="User">
-    <input id="loginPass" type="password" autocomplete="current-password" placeholder="Password" onkeydown="if(event.key==='Enter') loginUser()">
-    <button onclick="loginUser()">Enter</button>
-    <div id="loginError" style="color:red; font-size:12px; margin-top:10px; text-align:center;"></div>
+    <h2 style="margin-bottom:10px; color:#0D3311;">ניהול שווקים</h2>
+    <p style="margin-bottom:20px; color:#546E7A;">הכנס פרטי משתמש</p>
+    <input id="loginUser" type="text" placeholder="User">
+    <input id="loginPass" type="password" placeholder="Password" onkeydown="if(event.key==='Enter') loginUser()">
+    <button onclick="loginUser()">כניסה</button>
+    <div id="loginError" style="color:red; margin-top:10px; font-weight:bold;"></div>
   </div>
 </div>
 
 <header class="header">
-  <div style="display:flex; align-items:center; gap:10px;">
-    <span class="header-title">ניהול שווקים של יסכה רפאל</span>
-  </div>
-  <button id="userBadge" class="role-badge" onclick="logoutUser()">Login</button>
+  <span class="header-title">ניהול שווקים של יסכה רפאל</span>
+  <button id="userBadge" style="background:rgba(255,255,255,0.2); border:none; color:white; padding:5px 12px; border-radius:20px; font-size:12px;" onclick="logoutUser()">Login</button>
 </header>
 
-<main id="homeView">
-  <div class="stats-section" id="statsSection"></div>
-  <div style="padding: 16px; display: flex; gap: 10px;">
-    <button class="btn" style="background:#E3F2FD; color:#1565C0;" onclick="pullFromCloud()">📥 משוך מהענן</button>
-    <button class="btn" onclick="openModal()">+ שיווק חדש</button>
-  </div>
-  <div id="recordsList" class="records-section"></div>
+<main id="homeView" style="padding:20px;">
+  <div id="statsSection"></div>
+  <button class="btn" style="background:#E3F2FD; color:#1565C0;" onclick="pullFromCloud()">📥 משוך נתונים מהענן</button>
+  <div id="recordsList" style="margin-top:20px;"></div>
 </main>
 
+<nav class="bottom-bar">
+  <button class="bottom-btn active" onclick="location.reload()"><span>🏠</span>ראשי</button>
+  <button class="bottom-btn" onclick="alert('הגדרות')"><span>⚙️</span>הגדרות</button>
+</nav>
+
 <script>
-// КРИПТОГРАФИЯ (Исправлено для работы с admin/3216)
+// КРИПТОГРАФИЯ
 async function sha256(string) {
   const utf8 = new TextEncoder().encode(string);
   const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
@@ -67,6 +73,7 @@ async function sha256(string) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ПАРОЛИ (3216, 2222)
 const AUTH_USERS = [
   { username: 'admin', hash: 'c5b8e9f5e1f062a4d334589d84381e4b85c2c77d6741490212726715617c09f3', role: 'admin', label: 'Admin' },
   { username: 'Roi', hash: 'edee296205164d7df63077756f7e446f2541a021021757827e852a3a5f403e05', role: 'operator', label: 'Shivukim' }
@@ -74,23 +81,23 @@ const AUTH_USERS = [
 
 let currentUser = null;
 let records = [];
-let settings = { gsUrl: 'https://script.google.com/macros/s/AKfycbzwWZneN0iijypOQleEWa3DgTuyNx3Bux_AndUzF4DvmGrOzRW2b7morWf7IVVB8NVycw/exec', gsToken: 'POULTRY_SECRET_2026' };
+// Ссылка на твою новую таблицу Shivukim 2
+const MASTER_URL = 'https://script.google.com/macros/s/AKfycbzwWZneN0iijypOQleEWa3DgTuyNx3Bux_AndUzF4DvmGrOzRW2b7morWf7IVVB8NVycw/exec';
 
-// ИСПРАВЛЕННАЯ ФУНКЦИЯ ВХОДА
 async function loginUser() {
-  const u = document.getElementById('loginUser').value.trim();
-  const p = document.getElementById('loginPass').value;
-  const pHash = await sha256(p);
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const pHash = await sha256(pass);
   
-  const found = AUTH_USERS.find(user => user.username === u && user.hash === pHash);
+  const found = AUTH_USERS.find(u => u.username === user && u.hash === pHash);
   if (found) {
     currentUser = found;
+    localStorage.setItem('poultry_auth_user', JSON.stringify({username: user, role: found.role}));
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('userBadge').textContent = found.label;
-    localStorage.setItem('poultry_auth_user', JSON.stringify({username: u, role: found.role}));
     render();
   } else {
-    document.getElementById('loginError').textContent = 'Invalid user or password';
+    document.getElementById('loginError').textContent = 'שם משתמש או סיסמה שגויים';
   }
 }
 
@@ -100,30 +107,34 @@ function logoutUser() {
 }
 
 async function pullFromCloud() {
-  if (!settings.gsUrl) return alert('Укажите URL в настройках');
   try {
-    const res = await fetch(settings.gsUrl + '?type=shivukim');
+    const res = await fetch(MASTER_URL + '?type=shivukim');
     const data = await res.json();
     if (Array.isArray(data)) {
       records = data;
-      localStorage.setItem('poultry_manager_data', JSON.stringify(records));
       render();
     }
-  } catch(e) { alert('Ошибка связи с Google'); }
+  } catch(e) { alert('שגיאה בחיבור לענן'); }
 }
 
 function render() {
   const list = document.getElementById('recordsList');
   if (!list) return;
+  if (records.length === 0) {
+    list.innerHTML = '<p style="text-align:center; color:gray;">אין נתונים להצגה. משוך מהענן.</p>';
+    return;
+  }
   list.innerHTML = records.map(r => `
-    <div style="background:#fff; padding:15px; margin-bottom:10px; border-radius:12px; border-right:5px solid green;">
-      <b>${r.farm || 'Farm'}</b><br>
-      Qty: ${r.quantity} | ${r.slaughterhouse}
+    <div class="record-card">
+      <div style="display:flex; justify-content:space-between;">
+        <b>${r.farm || 'חווה'}</b>
+        <span style="color:green; font-weight:bold;">${r.quantity || 0}</span>
+      </div>
+      <div style="font-size:12px; color:gray; margin-top:5px;">משחטה: ${r.slaughterhouse || 'כללי'}</div>
     </div>
   `).join('');
 }
 
-// Проверка сессии при загрузке
 window.onload = () => {
   const saved = JSON.parse(localStorage.getItem('poultry_auth_user'));
   if (saved) {
