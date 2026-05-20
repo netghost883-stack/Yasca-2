@@ -448,20 +448,6 @@ function initLogoImages() {
   }
 }
 const MASTER_URL = 'https://script.google.com/macros/s/AKfycbxfe0YOcEjXd3_aQJXpxPIJX6NRwd6leZ6HBaHJpwHER7kM2gt2cCyi6HlJjnZwjWYAVA/exec';
-
-// ── API Token — מלא אחרי שהגדרת ב-setApiToken() ב-Apps Script ──
-const API_TOKEN = ''; // ← הכנס כאן את הטוקן שלך
-
-// ── URL builder with token ────────────────────────────────────────
-function getApiUrl(type) {
-  const t = API_TOKEN ? '&token=' + encodeURIComponent(API_TOKEN) : '';
-  return MASTER_URL + '?type=' + type + t;
-}
-
-// ── POST body builder with token ──────────────────────────────────
-function secureBody(data) {
-  return JSON.stringify(API_TOKEN ? { ...data, token: API_TOKEN } : data);
-}
 const TAB_NAMES = ['home', 'history', 'statistics', 'reports', 'plan', 'settings'];
 const PERIOD_OPTIONS = [
   { key: 'day', label: 'היום' },
@@ -490,7 +476,7 @@ function getGsUrl() {
   return MASTER_URL;
 }
 
-async function fetchCloudJson(getApiUrl('shivukim')) {
+async function fetchCloudJson(url) {
   let response;
   try {
     response = await fetch(url);
@@ -1041,14 +1027,14 @@ async function pullFromCloud() {
     // Pull שיווקים — try with type param first, fallback to plain URL
     let cloudData = null;
     try {
-      const data1 = await fetchCloudJson(getApiUrl('shivukim'));
+      const data1 = await fetchCloudJson(url + '?type=shivukim');
       if (Array.isArray(data1)) cloudData = data1;
     } catch(e1) { throw e1; }
 
     // Fallback: plain URL (old script format)
     if (!cloudData) {
       try {
-        const data2 = await fetchCloudJson(getApiUrl('shivukim'));
+        const data2 = await fetchCloudJson(url);
         if (Array.isArray(data2)) cloudData = data2;
       } catch(e2) { throw e2; }
     }
@@ -1067,7 +1053,7 @@ async function pullFromCloud() {
 
     // Pull דרישות (only if new script installed)
     try {
-      const resD = await fetch(getApiUrl('derishott'));
+      const resD = await fetch(url + '?type=derishott');
       const cloudDerishott = await resD.json();
       if (cloudDerishott && typeof cloudDerishott === 'object' && !Array.isArray(cloudDerishott) && !cloudDerishott.error) {
         const lo = getDerishott();
@@ -1081,7 +1067,7 @@ async function pullFromCloud() {
 
     // Pull תוכנית (only if new script installed)
     try {
-      const resT = await fetch(getApiUrl('tochnit'));
+      const resT = await fetch(url + '?type=tochnit');
       const cloudTochnit = await resT.json();
       if (cloudTochnit && typeof cloudTochnit === 'object' && !Array.isArray(cloudTochnit) && !cloudTochnit.error) {
         const local = getPlan();
@@ -1098,7 +1084,7 @@ async function pullFromCloud() {
 
     // Pull שחיטה בפועל
     try {
-      const resShc = await fetch(getApiUrl('shchita'));
+      const resShc = await fetch(url + '?type=shchita');
       const cloudShchita = await resShc.json();
       if (cloudShchita && typeof cloudShchita === 'object' && !Array.isArray(cloudShchita) && !cloudShchita.error) {
         const localShc = getShchita();
@@ -1125,7 +1111,7 @@ async function sync(record, action) {
     await fetch(url, {
       method: 'POST',
       mode: 'no-cors',
-      body: secureBody({ ...record, type: 'shivukim', action: action || 'upsert' })
+      body: JSON.stringify({ ...record, type: 'shivukim', action: action || 'upsert' })
     });
     return true;
   } catch(e) {
@@ -1927,7 +1913,7 @@ async function exportDailyExcel() {
     if (url) {
       try {
         let cloudData = null;
-        try { const r = await fetch(getApiUrl('shivukim')); const d = await r.json(); if (Array.isArray(d)) cloudData = d; } catch(e1) {}
+        try { const r = await fetch(url + '?type=shivukim'); const d = await r.json(); if (Array.isArray(d)) cloudData = d; } catch(e1) {}
         if (!cloudData) { try { const r = await fetch(url); const d = await r.json(); if (Array.isArray(d)) cloudData = d; } catch(e2) {} }
         if (cloudData && Array.isArray(cloudData)) {
           const cloudIds = new Set(cloudData.map(r => r.id));
@@ -2927,7 +2913,7 @@ function saveDerishott() {
   if (url) {
     fetch(url, {
       method: 'POST', mode: 'no-cors',
-      body: secureBody({ type: 'derishott', date: derishotDate, derishott: dayData })
+      body: JSON.stringify({ type: 'derishott', date: derishotDate, derishott: dayData })
     }).catch(() => {});
   }
 }
@@ -3080,7 +3066,7 @@ async function saveShchitaData() {
   const url = getGsUrl();
   if (!url || !Object.keys(dayData).length) return;
 
-  const payload = secureBody({ type: 'shchita', date: shchitaDate, shchita: dayData });
+  const payload = JSON.stringify({ type: 'shchita', date: shchitaDate, shchita: dayData });
 
   // Method 1: no-cors (always fires, no CORS error, no response)
   fetch(url, { method:'POST', mode:'no-cors', body: payload }).catch(()=>{});
@@ -3215,7 +3201,7 @@ function savePlanTarget() {
   if (url) {
     fetch(url, {
       method: 'POST', mode: 'no-cors',
-      body: secureBody({ type: 'tochnit', date: dateKey, slaughter, qty: val })
+      body: JSON.stringify({ type: 'tochnit', date: dateKey, slaughter, qty: val })
     }).catch(() => {});
   }
 }
@@ -3782,26 +3768,40 @@ async function exportPeriodExcel() {
 
       const overlay = document.createElement('div');
       overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;justify-content:center;';
+      overlay.setAttribute('data-pm','');
       overlay.innerHTML=`
         <div style="background:var(--surface);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px;max-height:92vh;overflow-y:auto;">
           <div style="font-weight:800;font-size:18px;margin-bottom:2px;">📅 דוח תכנון מול ביצוע — תקופתי</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;">תכנון שחיטה מול שחיטה בפועל לפי משחטות</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-            <button data-key="wk"  style="padding:12px;border-radius:12px;border:2px solid #ccc;background:#f9f9f9;color:#444;font-weight:800;font-size:13px;cursor:pointer;transition:all .15s;text-align:center;">📅 השבוע<br><span style="font-size:10px;font-weight:500;">${fmt(weekStart)} – ${fmt(weekEnd)}</span></button>
-            <button data-key="mo"  style="padding:12px;border-radius:12px;border:2px solid #ccc;background:#f9f9f9;color:#444;font-weight:800;font-size:13px;cursor:pointer;transition:all .15s;text-align:center;">🗓 החודש<br><span style="font-size:10px;font-weight:500;">${fmt(monthStart)} – ${fmt(monthEnd)}</span></button>
-            <button data-key="pwk" style="padding:12px;border-radius:12px;border:2px solid #ccc;background:#f9f9f9;color:#444;font-weight:800;font-size:13px;cursor:pointer;transition:all .15s;text-align:center;">⬅️ שבוע שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevWS)} – ${fmt(prevWE)}</span></button>
-            <button data-key="pmo" style="padding:12px;border-radius:12px;border:2px solid #ccc;background:#f9f9f9;color:#444;font-weight:800;font-size:13px;cursor:pointer;transition:all .15s;text-align:center;">⬅️ חודש שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevMS)} – ${fmt(prevME)}</span></button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;" id="pmBtnGrid">
+            <button id="pmBtn_wk" onclick="pmSelectBtn('wk',this)"
+              style="padding:12px;border-radius:12px;border:2px solid #ccc;background:#f9f9f9;color:#444;font-weight:800;font-size:13px;cursor:pointer;transition:all .15s;text-align:center;">
+              📅 השבוע<br><span style="font-size:10px;font-weight:500;">${fmt(weekStart)} – ${fmt(weekEnd)}</span></button>
+            <button id="pmBtn_mo" onclick="pmSelectBtn('mo',this)"
+              style="padding:12px;border-radius:12px;border:2px solid #ccc;background:#f9f9f9;color:#444;font-weight:800;font-size:13px;cursor:pointer;transition:all .15s;text-align:center;">
+              🗓 החודש<br><span style="font-size:10px;font-weight:500;">${fmt(monthStart)} – ${fmt(monthEnd)}</span></button>
+            <button id="pmBtn_pwk" onclick="pmSelectBtn('pwk',this)"
+              style="padding:12px;border-radius:12px;border:2px solid #ccc;background:#f9f9f9;color:#444;font-weight:800;font-size:13px;cursor:pointer;transition:all .15s;text-align:center;">
+              ⬅️ שבוע שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevWS)} – ${fmt(prevWE)}</span></button>
+            <button id="pmBtn_pmo" onclick="pmSelectBtn('pmo',this)"
+              style="padding:12px;border-radius:12px;border:2px solid #ccc;background:#f9f9f9;color:#444;font-weight:800;font-size:13px;cursor:pointer;transition:all .15s;text-align:center;">
+              ⬅️ חודש שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevMS)} – ${fmt(prevME)}</span></button>
           </div>
-          <div id="pmCustomBox" style="background:var(--bg);border-radius:12px;padding:10px 12px;border:2px solid #ccc;margin-bottom:10px;transition:border .2s;">
+          <div style="background:var(--bg);border-radius:12px;padding:10px 12px;border:2px solid #ccc;margin-bottom:12px;transition:border .2s;" id="pmCustomBox">
             <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--text-secondary);">✏️ טווח מותאם:</div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <input type="date" id="prFrom" value="" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
+              <input type="date" id="prFrom" value="${iso(weekStart)}"
+                onchange="pmOnDateChange()"
+                style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
               <span style="color:var(--text-secondary);">עד</span>
-              <input type="date" id="prTo" value="" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
-              <button id="pmCheckBtn" style="padding:8px 14px;border-radius:8px;border:2px solid #bbb;background:#eee;color:#bbb;font-weight:800;font-size:15px;cursor:not-allowed;transition:all .2s;" title="אשר טווח">✔</button>
+              <input type="date" id="prTo" value="${today}"
+                onchange="pmOnDateChange()"
+                style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
+              <button id="pmCheckBtn" onclick="pmConfirmCustom()"
+                title="אשר טווח מותאם"
+                style="padding:8px 14px;border-radius:8px;border:2px solid #bbb;background:#eee;color:#bbb;font-weight:800;font-size:15px;cursor:not-allowed;transition:all .2s;">✔</button>
             </div>
           </div>
-          <div id="pmLabel" style="font-size:12px;color:#1B5E20;font-weight:700;text-align:center;min-height:18px;margin-bottom:10px;"></div>
           <div style="display:flex;gap:10px;">
             <button id="prCancel" style="flex:1;padding:14px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--text);font-weight:800;font-size:15px;cursor:pointer;">ביטול</button>
             <button id="prOk" style="flex:2;padding:14px;border-radius:14px;border:none;background:#1565C0;color:#fff;font-weight:800;font-size:15px;cursor:pointer;">📊 הפק דוח תכנון מול ביצוע</button>
@@ -3809,62 +3809,97 @@ async function exportPeriodExcel() {
         </div>`;
       document.body.appendChild(overlay);
 
-      // ── state ──────────────────────────────────────────
-      let selStart = '', selEnd = '';
-      const fmtIso = s => s.split('-').reverse().join('.');
-      const presets = {
-        wk:  { s:iso(weekStart),  e:iso(weekEnd),  border:'#1B5E20', bg:'#E8F5E9', color:'#1B5E20' },
-        mo:  { s:iso(monthStart), e:iso(monthEnd), border:'#1565C0', bg:'#E3F2FD', color:'#1565C0' },
-        pwk: { s:iso(prevWS),     e:iso(prevWE),   border:'#555',    bg:'#f0f0f0', color:'#333'    },
-        pmo: { s:iso(prevMS),     e:iso(prevME),   border:'#555',    bg:'#f0f0f0', color:'#333'    },
+      // ── helper functions scoped to dialog ──────────────
+      const ACTIVE_STYLES = {
+        wk:  { border:'2px solid #1B5E20', bg:'#E8F5E9', color:'#1B5E20' },
+        mo:  { border:'2px solid #1565C0', bg:'#E3F2FD', color:'#1565C0' },
+        pwk: { border:'2px solid #555',    bg:'#f0f0f0', color:'#333' },
+        pmo: { border:'2px solid #555',    bg:'#f0f0f0', color:'#333' },
       };
-      const allPresetBtns = overlay.querySelectorAll('[data-key]');
-      const checkBtn  = overlay.querySelector('#pmCheckBtn');
-      const customBox = overlay.querySelector('#pmCustomBox');
-      const pmLabel   = overlay.querySelector('#pmLabel');
-      const fromIn    = overlay.querySelector('#prFrom');
-      const toIn      = overlay.querySelector('#prTo');
-
-      function resetBtns() {
-        allPresetBtns.forEach(b => { b.style.border='2px solid #ccc'; b.style.background='#f9f9f9'; b.style.color='#444'; b.style.boxShadow=''; });
-        customBox.style.border='2px solid #ccc';
-        checkBtn.style.background='#eee'; checkBtn.style.borderColor='#bbb'; checkBtn.style.color='#bbb'; checkBtn.style.cursor='not-allowed';
-      }
-
-      allPresetBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-          const p = presets[btn.dataset.key]; if (!p) return;
-          resetBtns();
-          btn.style.border='2px solid '+p.border; btn.style.background=p.bg; btn.style.color=p.color; btn.style.boxShadow='0 2px 10px rgba(0,0,0,0.13)';
-          selStart=p.s; selEnd=p.e;
-          fromIn.value=''; toIn.value='';
-          pmLabel.textContent = '✅ נבחר: ' + fmtIso(p.s) + ' – ' + fmtIso(p.e);
+      function pmSelectBtn(key, btn) {
+        // reset all preset buttons
+        ['wk','mo','pwk','pmo'].forEach(k => {
+          const b = document.getElementById('pmBtn_' + k);
+          if (!b) return;
+          b.style.border = '2px solid #ccc';
+          b.style.background = '#f9f9f9';
+          b.style.color = '#444';
+          b.style.boxShadow = '';
         });
-      });
-
-      function onDateInput() {
-        resetBtns(); selStart=''; selEnd=''; pmLabel.textContent='';
-        const f=fromIn.value, t=toIn.value;
-        if (f && t && f<=t) { checkBtn.style.background='#E8F5E9'; checkBtn.style.borderColor='#1B5E20'; checkBtn.style.color='#1B5E20'; checkBtn.style.cursor='pointer'; }
+        // reset custom box border
+        document.getElementById('pmCustomBox').style.border = '2px solid #ccc';
+        document.getElementById('pmCheckBtn').style.background = '#eee';
+        document.getElementById('pmCheckBtn').style.borderColor = '#bbb';
+        document.getElementById('pmCheckBtn').style.color = '#bbb';
+        document.getElementById('pmCheckBtn').style.cursor = 'not-allowed';
+        // highlight selected
+        const st = ACTIVE_STYLES[key] || ACTIVE_STYLES.pwk;
+        btn.style.border = st.border;
+        btn.style.background = st.bg;
+        btn.style.color = st.color;
+        btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.12)';
+        overlay.dataset.sel = key;
       }
-      fromIn.addEventListener('change', onDateInput);
-      toIn.addEventListener('change', onDateInput);
+      function pmOnDateChange() {
+        const f = document.getElementById('prFrom').value;
+        const t = document.getElementById('prTo').value;
+        const btn = document.getElementById('pmCheckBtn');
+        const box = document.getElementById('pmCustomBox');
+        if (f && t && f <= t) {
+          btn.style.background = '#E8F5E9';
+          btn.style.borderColor = '#1B5E20';
+          btn.style.color = '#1B5E20';
+          btn.style.cursor = 'pointer';
+          box.style.border = '2px solid #ccc';
+          // deselect preset buttons if dates changed
+          if (overlay.dataset.sel !== 'custom') {
+            ['wk','mo','pwk','pmo'].forEach(k => {
+              const b = document.getElementById('pmBtn_' + k);
+              if (b) { b.style.border='2px solid #ccc'; b.style.background='#f9f9f9'; b.style.color='#444'; b.style.boxShadow=''; }
+            });
+          }
+        } else {
+          btn.style.background = '#eee';
+          btn.style.borderColor = '#bbb';
+          btn.style.color = '#bbb';
+          btn.style.cursor = 'not-allowed';
+        }
+      }
+      function pmConfirmCustom() {
+        const f = document.getElementById('prFrom').value;
+        const t = document.getElementById('prTo').value;
+        if (!f || !t || f > t) return;
+        // deselect presets
+        ['wk','mo','pwk','pmo'].forEach(k => {
+          const b = document.getElementById('pmBtn_' + k);
+          if (b) { b.style.border='2px solid #ccc'; b.style.background='#f9f9f9'; b.style.color='#444'; b.style.boxShadow=''; }
+        });
+        // mark custom as confirmed
+        const btn = document.getElementById('pmCheckBtn');
+        btn.style.background = '#1B5E20';
+        btn.style.borderColor = '#1B5E20';
+        btn.style.color = '#fff';
+        btn.style.cursor = 'default';
+        const box = document.getElementById('pmCustomBox');
+        box.style.border = '2px solid #1B5E20';
+        overlay.dataset.sel = 'custom';
+      }
+      // expose to inline onclick
+      window.pmSelectBtn     = pmSelectBtn;
+      window.pmOnDateChange  = pmOnDateChange;
+      window.pmConfirmCustom = pmConfirmCustom;
 
-      checkBtn.addEventListener('click', () => {
-        const f=fromIn.value, t=toIn.value; if (!f||!t||f>t) return;
-        selStart=f; selEnd=t;
-        checkBtn.style.background='#1B5E20'; checkBtn.style.borderColor='#1B5E20'; checkBtn.style.color='#fff'; checkBtn.style.cursor='default';
-        customBox.style.border='2px solid #1B5E20';
-        pmLabel.textContent='✅ נבחר: '+fmtIso(f)+' – '+fmtIso(t);
-      });
-
-      overlay.querySelector('#prOk').addEventListener('click', () => {
-        if (!selStart||!selEnd) { alert('נא לבחור תקופה או לאשר טווח מותאם ✔'); return; }
-        document.body.removeChild(overlay); resolve({start:selStart,end:selEnd});
-      });
-      overlay.querySelector('#prCancel').addEventListener('click', () => {
-        document.body.removeChild(overlay); resolve(null);
-      });
+      const ranges={wk:[iso(weekStart),iso(weekEnd)],mo:[iso(monthStart),iso(monthEnd)],pwk:[iso(prevWS),iso(prevWE)],pmo:[iso(prevMS),iso(prevME)]};
+      document.getElementById('prOk').onclick=()=>{
+        const sel=overlay.dataset.sel;
+        let s,e;
+        if(sel==='custom'){s=document.getElementById('prFrom').value;e=document.getElementById('prTo').value;}
+        else if(ranges[sel]){[s,e]=ranges[sel];}else{[s,e]=ranges['wk'];}
+        if(!s||!e){alert('נא לבחור תקופה או לאשר טווח מותאם');return;}
+        document.body.removeChild(overlay); resolve({start:s,end:e});
+      };
+      document.getElementById('prCancel').onclick=()=>{document.body.removeChild(overlay);resolve(null);};
+    });
     if (!result) return;
     const { start, end } = result;
     const fmtD = s => s.split('-').reverse().join('.');
@@ -4138,7 +4173,7 @@ try {
       // שיווקים
       let cloudData = null;
       try { const d=await fetchCloudJson(url+'?type=shivukim'); if(Array.isArray(d)) cloudData=d; } catch(e){ throw e; }
-      if (!cloudData) { try { const d=await fetchCloudJson(getApiUrl('shivukim')); if(Array.isArray(d)) cloudData=d; } catch(e){ throw e; } }
+      if (!cloudData) { try { const d=await fetchCloudJson(url); if(Array.isArray(d)) cloudData=d; } catch(e){ throw e; } }
       if (cloudData) {
         const ids = new Set(cloudData.map(r=>r.id));
         records = [...cloudData, ...records.filter(r=>r.status==='pending'&&!ids.has(r.id))];
