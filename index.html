@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>ניהול שווקים של יסכה רפאל</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -452,7 +452,10 @@ function initLogoImages() {
 // ── CLOUD CONFIG ─────────────────────────────────────────────────────────────
 // test     = тестовая таблица (безопасно для экспериментов)
 // production = основная база (НЕ трогать при отладке)
-const CLOUD_SOURCE = 'production';
+const CLOUD_SOURCE = 'test';
+const DEBUG = false;
+const dlog = (...a) => { if (DEBUG) dlog(...a); };
+const dwarn = (...a) => { if (DEBUG) dwarn(...a); };
 const PRODUCTION_SYNC_URL = 'https://script.google.com/macros/s/AKfycbz25N6oA-t01yqdm0_hwwxXIln4y-9PwXr0uCjIZ33aDUixc66ad-MoycdY9Bi9T1Ie/exec';
 const TEST_SPREADSHEET_ID = '1gKrP8nvHU2GHR3g2xlnW-SGH3WNgn5H2pA5sKF6gXdg';
 const TEST_SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/' + TEST_SPREADSHEET_ID + '/edit';
@@ -708,16 +711,15 @@ try {
 try {
   const savedSettings = localStorage.getItem('poultry_manager_settings');
   if (savedSettings) settings = normalizeSettings(JSON.parse(savedSettings));
-} catch (e) {}
+} catch (e) { console.error(e); }
 settings = normalizeSettings(settings);
-try { localStorage.setItem('poultry_manager_settings', JSON.stringify(settings)); } catch (e) {}
+try { localStorage.setItem('poultry_manager_settings', JSON.stringify(settings)); } catch (e) { console.error(e); }
 
 function getSafeIsoDate() {
   try {
-    const tzOffset = new Date().getTimezoneOffset() * 60000;
-    return new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
+    return israelDate(Date.now()); // Israel-TZ aware (fix)
   } catch (e) {
-    return '2026-01-01';
+    return new Date().toISOString().slice(0, 10);
   }
 }
 
@@ -769,8 +771,11 @@ function truncateLabel(value, maxLen) {
 }
 
 function getDateKey(dateObj) {
-  const local = new Date(dateObj.getTime() - dateObj.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
+  try {
+    return israelDate(dateObj); // Israel-TZ aware (fix)
+  } catch(e) {
+    return new Date(dateObj).toISOString().slice(0, 10);
+  }
 }
 
 function parseIsoDateLocal(isoStr) {
@@ -901,7 +906,7 @@ function getRecordDate(record) {
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
 
-  console.warn('getRecordDate: cannot parse datetime:', raw);
+  dwarn('getRecordDate: cannot parse datetime:', raw);
   return null;
 }
 
@@ -924,6 +929,143 @@ const HEBREW_FIELD_MAP = {
 
 // ── Convert any cloud format to normalized nested {YYYY-MM-DD: {slaughter: qty}} ──
 // Handles 3 formats:
+// ── love.html calendar fix: Israel-timezone-aware date + row parsing ──
+// Converts any timestamp to YYYY-MM-DD in Asia/Jerusalem (handles DST correctly)
+function israelDate(t) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(new Date(t));
+}
+
+// Canonicalises slaughter names the same way love.html does
+function canonicalSlaughter(name) {
+  const s = String(name || "").trim();
+  if (!s) return "";
+  if (/^מעוף\s*2/.test(s)) return "מעוף 2";
+  if (s.startsWith("מעוף"))  return "מעוף";
+  if (s.includes("טרי"))     return "טרי וחלק";
+  if (s.includes("מישור"))   return "מישור";
+  if (s.includes("אשקלון")) return "אשקלון";
+  if (s.includes("עטרות"))   return "עטרות";
+  if (s.includes("כללי"))    return "כללי";
+  // Fallback: return original trimmed value so external slaughterhouses are preserved
+  return s;
+}
+
+// Scans ALL values in a raw sheet row (field-name agnostic).
+// Returns {date, slaughter, qty} or null.
+function extractRowIL(raw) {
+  let slaughter = ""; let qty = 0;
+  let isoDate = ""; // direct YYYY-MM-DD wins over any timestamp
+  const dates = [];
+  for (const v of Object.values(raw)) {
+    if (v == null || v === "") continue;
+    if (typeof v === "number") { if (v > qty) qty = v; continue; }
+    if (typeof v === "string") {
+      const s = v.trim(); if (!s) continue;
+      // Pure date column YYYY-MM-DD (no time part) — that's the record date
+      const isoMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (isoMatch) {
+        if (!isoDate) isoDate = `${isoMatch[1]}-${String(isoMatch[2]).padStart(2,'0')}-${String(isoMatch[3]).padStart(2,'0')}`;
+        continue;
+      }
+      // Detect timestamps (ISO with time, GMT string, d.m.y with time)
+      if (/^\d{4}-\d{1,2}-\d{1,2}T/.test(s) || /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || /GMT|UTC|\dZ$/.test(s)) {
+        const t = Date.parse(s);
+        if (!isNaN(t)) {
+          const hms = new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+          }).format(new Date(t));
+          dates.push({ t, isMidnightIL: hms === "00:00:00" || hms === "24:00:00" });
+        }
+        continue;
+      }
+      const c = canonicalSlaughter(s);
+      if (c && !slaughter) slaughter = c;
+    }
+  }
+  let date = isoDate;
+  if (!date && dates.length) {
+    const mid = dates.filter(x => x.isMidnightIL);
+    const pick = mid.length ? mid.sort((a, b) => a.t - b.t)[0] : dates.sort((a, b) => a.t - b.t)[0];
+    date = israelDate(pick.t);
+  }
+  if (!date || !slaughter || !qty) return null;
+  return { date, slaughter, qty };
+}
+// ── end love.html calendar fix ──
+
+// ── Israel-timezone timestamp formatter ──
+// Returns "D.M.YYYY, H:MM:SS" (matches the "תוכנית"/"שחיטות" sheet column D format)
+function formatIsraelTimestamp(date) {
+  const d = date instanceof Date ? date : new Date(date || Date.now());
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    day: 'numeric', month: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: false
+  }).formatToParts(d).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  let hour = parts.hour === '24' ? '0' : parts.hour;
+  return `${parts.day}.${parts.month}.${parts.year}, ${hour}:${parts.minute}:${parts.second}`;
+}
+
+// Build a flat rows array [[YYYY-MM-DD, slaughter, qty, timestamp], ...]
+// matching the sheet layout: A=date, B=slaughter, C=qty, D=timestamp.
+function buildSheetRows(dateKey, slaughterMap) {
+  const ts = formatIsraelTimestamp(new Date());
+  const rows = [];
+  Object.entries(slaughterMap || {}).forEach(([sl, qty]) => {
+    const q = Number(qty) || 0;
+    if (!sl) return;
+    rows.push([dateKey, sl, q, ts]);
+  });
+  return rows;
+}
+
+// ── love.html: exact API constants and getall mechanism ──
+const LOVE_API_TOKEN = 'Wo5gWfITVAyXx70ZOg5MIOyPWTaxM924OqoLHZCB';
+function urlWithToken(url) {
+  if (!url) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + 'token=' + encodeURIComponent(LOVE_API_TOKEN);
+}
+
+// Fetches both tochnit and shchita in one call — the same way love.html does.
+// Uses TEST_SYNC_URL (the new token-auth backend for tochnit/shchita). Returns {ok, tochnit:[], shchita:[]} or null.
+async function apiGetAllLove() {
+  const loveUrl = TEST_SYNC_URL;
+  if (!loveUrl) return null;
+  try {
+    const res = await fetch(`${loveUrl}?token=${encodeURIComponent(LOVE_API_TOKEN)}&action=getall`);
+    return res.json();
+  } catch(e) {
+    dwarn('apiGetAllLove error:', e);
+    return null;
+  }
+}
+
+// love.html aggregate() — but LAST-WRITE-WINS instead of summing duplicates,
+// so multiple sheet updates for the same date+slaughter do not inflate totals.
+function aggregateLove(rows) {
+  const out = {};
+  if (!rows || !Array.isArray(rows)) return out;
+  // Sort by updatedAt ascending so later writes overwrite earlier ones.
+  const sorted = [...rows].sort((a, b) => {
+    const ta = String((a && (a.updatedAt || a.updated_at)) || '');
+    const tb = String((b && (b.updatedAt || b.updated_at)) || '');
+    return ta.localeCompare(tb);
+  });
+  for (const r of sorted) {
+    const p = extractRowIL(r);
+    if (!p) continue;
+    if (!out[p.date]) out[p.date] = {};
+    out[p.date][p.slaughter] = p.qty; // overwrite, do not sum
+  }
+  return out;
+}
+
+// ── end love.html API mechanism ──
+
+
 //   1. Flat array [{date, slaughter, qty, updatedAt}]  (normal)
 //   2. Flat array with JSON blob in slaughter field     {"מעוף":52714,...}
 //   3. Nested object with JS Date string keys          {"Wed May 13 2026 00:00:00 GMT+0300": {...}}
@@ -961,7 +1103,7 @@ function parseDateToYMD(rawDate) {
       let ms = d.getTime();
       if (offsetMatch) {
         const sign = offsetMatch[1] === '+' ? 1 : -1;
-        ms += sign * (parseInt(offsetMatch[2]) * 60 + parseInt(offsetMatch[3])) * 60000;
+        ms += sign * (parseInt(offsetMatch[2], 10) * 60 + parseInt(offsetMatch[3], 10)) * 60000;
       }
       const nd = new Date(ms);
       return nd.toISOString().substring(0, 10);
@@ -1064,6 +1206,7 @@ function cloudArrayToNestedMap(arr) {
     });
     return result;
   }
+  // ── love.html fix: use Israel-timezone-aware extractRowIL ──
   const timestamps = {};
   const result = {};
   const sorted = [...arr].sort((a, b) => {
@@ -1075,6 +1218,18 @@ function cloudArrayToNestedMap(arr) {
   });
   sorted.forEach(row => {
     if (!row) return;
+
+    // Try love.html extractor first (Israel TZ, field-name agnostic)
+    const extracted = (typeof row === 'object' && !Array.isArray(row)) ? extractRowIL(row) : null;
+    if (extracted) {
+      const { date: dateStr, slaughter, qty } = extracted;
+      if (!result[dateStr]) result[dateStr] = {};
+      result[dateStr][slaughter] = qty; // last-write-wins (rows pre-sorted by updatedAt)
+
+      return;
+    }
+
+    // Fallback: original logic for JSON-blob rows and array rows
     const mapped = normalizeSheetRow(row);
     if (!mapped) return;
     const rawDate = mapped.date || mapped.datetime || '';
@@ -1083,7 +1238,7 @@ function cloudArrayToNestedMap(arr) {
     if (!dateStr) return;
     const rawSlaughter = mapped.slaughterhouse || mapped.slaughter || '';
     const updatedAt = String(mapped.updatedAt || mapped.updated_at || '');
-    // Case 1: slaughter field contains a JSON blob {"מעוף":52714,...}
+    // Case 1: slaughter field contains a JSON blob
     if (rawSlaughter && String(rawSlaughter).trim().startsWith('{')) {
       try {
         const parsed = JSON.parse(String(rawSlaughter).trim());
@@ -1132,7 +1287,7 @@ function shivukimToShchitaMap(shivukimRecords) {
     if (!result[dateStr]) result[dateStr] = {};
     result[dateStr][bucket] = (result[dateStr][bucket] || 0) + qty;
   });
-  console.log('shivukimToShchitaMap: converted', shivukimRecords.length, 'records into', Object.keys(result).length, 'dates');
+  dlog('shivukimToShchitaMap: converted', shivukimRecords.length, 'records into', Object.keys(result).length, 'dates');
   return result;
 }
 
@@ -1405,10 +1560,10 @@ function render() {
 
     // Show warning if records have unparseable dates
     if (badDateCount > 0 && filteredRecords.length > 0) {
-      console.warn(`render: ${badDateCount}/${filteredRecords.length} records have invalid datetime`);
+      dwarn(`render: ${badDateCount}/${filteredRecords.length} records have invalid datetime`);
       // Show first bad record sample for debugging
       const badSample = filteredRecords.map(normalizeRecord).find(item => !item.parsedDate);
-      if (badSample) console.warn('Sample bad record datetime:', badSample.datetime);
+      if (badSample) dwarn('Sample bad record datetime:', badSample.datetime);
     }
 
     const todayList = normalizedRecords.filter(item => getDateKey(item.parsedDate) === todayStr);
@@ -1487,14 +1642,15 @@ async function pullFromCloud() {
       localStorage.setItem('poultry_manager_data', JSON.stringify(records));
 
       // שיווק הם שיווק בלבד — תכנון ושחיטה נטענים רק מהגיליונות הייעודיים שלהם
-      console.log('pullFromCloud: shivukim loaded:', cloudData.length, 'records (no auto-fill to plan/shchita)');
+      dlog('pullFromCloud: shivukim loaded:', cloudData.length, 'records (no auto-fill to plan/shchita)');
 
       render();
-      toast(`✅ סונכרן — ${cloudData.length} רשומות`);
+      toast(`✅ שיווקים סונכרן — ${cloudData.length} רשומות`);
     } else {
-      alert('לא התקבלו נתונים מהענן.\n\n1. פתחו את הקישור בהגדרות בטאב חדש — צריך לראות טקסט JSON (מתחיל ב־[ או {).\n2. אם מופיע "דף לא נמצא" — העתיקו שוב את הקישור מ־Apps Script → ניהול פריסות.\n3. בפריסה: גישה = כולם (Anyone).');
-      toast('❌ לא התקבלו נתונים מהענן');
-      return;
+      // Shivukim data unavailable (backend may not support it or requires different endpoint)
+      // Do NOT abort — continue loading tochnit/shchita below
+      dlog('pullFromCloud: shivukim not available from this endpoint, continuing with tochnit/shchita');
+      toast('ℹ️ שיווקים: אין נתונים — ממשיך לתכנון/שחיטה');
     }
 
     // Pull דרישות (only if new script installed)
@@ -1509,48 +1665,62 @@ async function pullFromCloud() {
       }
     } catch(e3) {}
 
-    // Pull תוכנית — נטען רק מגיליון tochnit (לא מושפע משיווק)
+    // Pull תוכנית + שחיטה — love.html approach first (action=getall), then type= fallback
     try {
-      const cloudTochnit = await fetchCloudJson(url + '?type=tochnit');
-      console.log('pullFromCloud tochnit raw:', JSON.stringify(cloudTochnit).substring(0, 200));
-      if (cloudTochnit && !cloudTochnit.error) {
-        const nested = cloudArrayToNestedMap(getCloudRowsOrMap(cloudTochnit));
-        console.log('pullFromCloud tochnit nested dates:', Object.keys(nested).length);
-        if (typeof nested === 'object' && Object.keys(nested).length > 0) {
-          const local = getPlan();
-          Object.entries(nested).forEach(([date, slaughters]) => {
-            if (!local[date]) local[date] = {};
-            Object.assign(local[date], slaughters);
-          });
-          savePlan(local);
-          console.log('pullFromCloud: plan loaded from tochnit:', Object.keys(nested).length, 'dates');
+      const loveData = await apiGetAllLove();
+      dlog('pullFromCloud apiGetAllLove:', loveData ? (loveData.ok ? 'ok' : 'err:'+loveData.error) : 'null');
+      if (loveData && loveData.ok) {
+        // tochnit from getall
+        if (Array.isArray(loveData.tochnit) && loveData.tochnit.length > 0) {
+          const nested = aggregateLove(loveData.tochnit);
+          if (Object.keys(nested).length > 0) {
+            const local = getPlan();
+            Object.entries(nested).forEach(([dt,sl])=>{ if(!local[dt]) local[dt]={}; Object.assign(local[dt],sl); });
+            savePlan(local);
+            dlog('pullFromCloud getall tochnit:', Object.keys(nested).length, 'dates');
+          }
+        }
+        // shchita from getall
+        if (Array.isArray(loveData.shchita) && loveData.shchita.length > 0) {
+          const nested = aggregateLove(loveData.shchita);
+          if (Object.keys(nested).length > 0) {
+            const localShc = getShchita();
+            Object.entries(nested).forEach(([dt,sl])=>{ if(!localShc[dt]) localShc[dt]={}; Object.assign(localShc[dt],sl); });
+            saveShchitaStorage(localShc);
+            dlog('pullFromCloud getall shchita:', Object.keys(nested).length, 'dates');
+          }
+        }
+      } else {
+        // Fallback: type= endpoints
+        dlog('pullFromCloud: falling back to type= endpoints');
+        const cloudTochnit = await fetchCloudJson(url + '?type=tochnit');
+        dlog('pullFromCloud tochnit raw:', JSON.stringify(cloudTochnit).substring(0, 200));
+        if (cloudTochnit && !cloudTochnit.error) {
+          const nested = cloudArrayToNestedMap(getCloudRowsOrMap(cloudTochnit));
+          if (typeof nested === 'object' && Object.keys(nested).length > 0) {
+            const local = getPlan();
+            Object.entries(nested).forEach(([dt,sl])=>{ if(!local[dt]) local[dt]={}; Object.assign(local[dt],sl); });
+            savePlan(local);
+          }
+        }
+        const cloudShchita = await fetchCloudJson(url + '?type=shchita');
+        dlog('pullFromCloud shchita raw:', JSON.stringify(cloudShchita).substring(0, 200));
+        if (cloudShchita && !cloudShchita.error) {
+          const nested = cloudArrayToNestedMap(getCloudRowsOrMap(cloudShchita));
+          if (typeof nested === 'object' && Object.keys(nested).length > 0) {
+            const localShc = getShchita();
+            Object.entries(nested).forEach(([dt,sl])=>{ if(!localShc[dt]) localShc[dt]={}; Object.assign(localShc[dt],sl); });
+            saveShchitaStorage(localShc);
+          }
         }
       }
-    } catch(e4) { console.warn('pullFromCloud tochnit error:', e4); }
-
-    // Pull שחיטה בפועל — נטען רק מגיליון shchita (לא מושפע משיווק)
-    try {
-      const cloudShchita = await fetchCloudJson(url + '?type=shchita');
-      console.log('pullFromCloud shchita raw:', JSON.stringify(cloudShchita).substring(0, 200));
-      if (cloudShchita && !cloudShchita.error) {
-        const nested = cloudArrayToNestedMap(getCloudRowsOrMap(cloudShchita));
-        console.log('pullFromCloud shchita nested dates:', Object.keys(nested).length);
-        if (typeof nested === 'object' && Object.keys(nested).length > 0) {
-          const localShc = getShchita();
-          Object.entries(nested).forEach(([date, slaughters]) => {
-            if (!localShc[date]) localShc[date] = {};
-            Object.assign(localShc[date], slaughters);
-          });
-          saveShchitaStorage(localShc);
-          console.log('pullFromCloud: shchita loaded from cloud:', Object.keys(nested).length, 'dates');
-        }
-      }
-    } catch(e_shc) { console.warn('pullFromCloud shchita error:', e_shc); }
+    } catch(e4) { dwarn('pullFromCloud tochnit/shchita error:', e4); }
 
     // Render everything after all data is loaded
     if (document.getElementById('derishotGrid')) renderDerishotGrid();
     if (document.getElementById('planDailyGrid')) renderPlanView();
     if (document.getElementById('shchitaGrid')) renderShchitaGrid();
+    toast('✅ תכנון ושחיטה סונכרנו מהענן');
 
   } catch (e) {
     alert('שגיאה במשיכת נתונים מהענן:\n' + e.message);
@@ -1568,7 +1738,7 @@ async function sync(record, action) {
     });
     return true;
   } catch(e) {
-    console.warn('Sync failed:', e);
+    dwarn('Sync failed:', e);
     return false;
   }
 }
@@ -1591,7 +1761,7 @@ async function saveRecord() {
     rememberSlaughterhouse(slaughterhouse);
 
     const data = {
-      id: editingId || Date.now().toString(36),
+      id: editingId || (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8)),
       datetime: document.getElementById('fDate').value || new Date().toISOString(),
       farm: farm,
       quantity: Number(qty),
@@ -1620,6 +1790,8 @@ async function saveRecord() {
       localStorage.setItem('poultry_manager_data', JSON.stringify(records));
       render();
       toast('✅ סונכרן בהצלחה');
+    } else {
+      toast('⚠️ נשמר מקומית, סנכרון נכשל');
     }
   } catch (e) {
     alert('שגיאה בשמירת הנתונים: ' + e.message);
@@ -1631,14 +1803,16 @@ async function deleteRecord(id) {
   try {
     if (!confirm('למחוק מהטבלה ומכאן?')) return;
     const found = records.find(item => item.id === id);
+    if (!found) return;
+    toast('🗑️ מוחק מהענן...');
+    const ok = await sync(found, 'delete');
+    if (!ok) {
+      if (!confirm('מחיקה מהענן נכשלה. למחוק רק מקומית?')) return;
+    }
     records = records.filter(item => item.id !== id);
     localStorage.setItem('poultry_manager_data', JSON.stringify(records));
     render();
-    if (found) {
-      toast('🗑️ מוחק מהענן...');
-      const ok = await sync(found, 'delete');
-      toast(ok ? '✅ נמחק בהצלחה' : '⚠️ נמחק מקומית, לא הצליח במחיקה מהענן');
-    }
+    toast(ok ? '✅ נמחק בהצלחה' : '⚠️ נמחק מקומית בלבד');
   } catch (e) {
     alert('שגיאה במחיקה: ' + e.message);
   }
@@ -1662,7 +1836,7 @@ function openModal() {
     document.getElementById('fNotes').value = '';
     document.getElementById('modal').style.display = 'flex';
     renderTemplateChips();
-  } catch (e) {}
+  } catch (e) { console.error(e); }
 }
 
 function closeModal() {
@@ -1676,11 +1850,17 @@ function editRecord(id) {
     if (!found) return;
     editingId = found.id;
     document.getElementById('formTitle').innerText = 'עריכת שיווק';
-    const dt = found.datetime ? found.datetime.slice(0, 16) : '';
+    // Правильный парсинг даты для <input type="datetime-local">
+    let dt = '';
+    const parsedDt = getRecordDate(found);
+    if (parsedDt) {
+      const local = new Date(parsedDt.getTime() - parsedDt.getTimezoneOffset() * 60000);
+      dt = local.toISOString().slice(0, 16);
+    }
     document.getElementById('fDate').value = dt;
     document.getElementById('fFarm').value = found.farm || '';
     hideFarmSuggestions();
-    document.getElementById('fQty').value = found.quantity;
+    document.getElementById('fQty').value = found.quantity != null ? found.quantity : '';
     const slaughterVal = found.slaughterhouse || '';
     populateSlaughterSelect(slaughterVal);
     const knownSlaughters = [...getAllSlaughterhouses(), ''];
@@ -1694,10 +1874,10 @@ function editRecord(id) {
       document.getElementById('fSlaughter').style.display = 'block';
       document.getElementById('fSlaughter').value = slaughterVal;
     }
-    document.getElementById('fKashrut').value = found.kashrut;
-    document.getElementById('fNotes').value = found.notes;
+    document.getElementById('fKashrut').value = found.kashrut || '';
+    document.getElementById('fNotes').value = found.notes || '';
     document.getElementById('modal').style.display = 'flex';
-  } catch (e) {}
+  } catch (e) { console.error(e); }
 }
 
 function setStatisticsPeriod(period) {
@@ -1730,7 +1910,7 @@ function switchTab(tabName) {
     const shchitaFab = document.getElementById('shchitaFab');
     if (shchitaFab) shchitaFab.style.display = (tabName === 'plan' && can('planWrite')) ? 'flex' : 'none';
     if (tabName === 'plan') { renderPlanView(); renderDerishotGrid(); }
-  } catch (e) {}
+  } catch (e) { console.error(e); }
 }
 
 function getExportFilename(extension) {
@@ -1746,7 +1926,7 @@ function downloadBlob(blob, filename) {
   setTimeout(() => {
     URL.revokeObjectURL(link.href);
     document.body.removeChild(link);
-  }, 0);
+  }, 100);
 }
 
 async function svgToPngDataUrl(svgText) {
@@ -2368,14 +2548,27 @@ async function exportDailyExcel() {
     if (url) {
       try {
         let cloudData = null;
-        try { const r = await fetch(url + '?type=shivukim'); const d = await r.json(); if (Array.isArray(d)) cloudData = d; } catch(e1) {}
-        if (!cloudData) { try { const r = await fetch(url); const d = await r.json(); if (Array.isArray(d)) cloudData = d; } catch(e2) {} }
+        try { const d = await fetchCloudJson(url + '?type=shivukim'); if (Array.isArray(d)) cloudData = d; } catch(e1) {}
+        if (!cloudData) { try { const d = await fetchCloudJson(url); if (Array.isArray(d)) cloudData = d; } catch(e2) {} }
         if (cloudData && Array.isArray(cloudData)) {
+          cloudData = cloudData.map(normalizeCloudRecord);
           const cloudIds = new Set(cloudData.map(r => r.id));
           const localPending = records.filter(r => r.status === 'pending' && !cloudIds.has(r.id));
           records = [...cloudData, ...localPending];
           localStorage.setItem('poultry_manager_data', JSON.stringify(records));
           render();
+        }
+        // Also refresh tochnit+shchita via love.html mechanism
+        const lv = await apiGetAllLove();
+        if (lv && lv.ok) {
+          if (Array.isArray(lv.tochnit) && lv.tochnit.length) {
+            const n=aggregateLove(lv.tochnit); const lo=getPlan();
+            Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); savePlan(lo);
+          }
+          if (Array.isArray(lv.shchita) && lv.shchita.length) {
+            const n=aggregateLove(lv.shchita); const lo=getShchita();
+            Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); saveShchitaStorage(lo);
+          }
         }
       } catch(e) { /* ממשיכים עם הנתונים המקומיים */ }
     }
@@ -2994,7 +3187,7 @@ let lastSyncTime = null;
 function saveAutoSync() {
   if (!requirePermission('settingsWrite')) return;
   const sel = document.getElementById('autoSyncSelect');
-  settings.autoSyncMins = parseInt(sel ? sel.value : 0) || 0;
+  settings.autoSyncMins = parseInt(sel ? sel.value : 0, 10) || 0;
   saveS();
   startAutoSync();
   toast(settings.autoSyncMins ? `☁️ סנכרון אוטומטי כל ${settings.autoSyncMins} דקות` : '☁️ סנכרון אוטומטי כבוי');
@@ -3002,7 +3195,7 @@ function saveAutoSync() {
 
 function startAutoSync() {
   if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null; }
-  const mins = parseInt(settings.autoSyncMins) || 0;
+  const mins = parseInt(settings.autoSyncMins, 10) || 0;
   const url = getGsUrl();
   if (!mins || !url) return;
   autoSyncTimer = setInterval(async () => {
@@ -3415,12 +3608,7 @@ function saveDerishott() {
 
   // Sync to Google Sheets
   const url = getGsUrl();
-  if (url) {
-    fetch(url, {
-      method: 'POST', mode: 'no-cors',
-      body: JSON.stringify({ type: 'derishott', date: derishotDate, derishott: dayData })
-    }).catch(() => {});
-  }
+  // derishott не имеет листа в GAS — только локальное сохранение
 }
 
 function copyDerishotFromYesterday() {
@@ -3567,27 +3755,17 @@ async function saveShchitaData() {
   if (document.getElementById('planDailyGrid')) renderPlanView();
   if (document.getElementById('derishotGrid')) renderDerishotGrid();
 
-  // Sync to Google Sheets — try both methods for reliability
+  // Sync to Google Sheets — one flat row per slaughterhouse (same format as old rows)
   const url = getGsUrl();
   if (!url || !Object.keys(dayData).length) return;
 
-  const payload = JSON.stringify({ type: 'shchita', date: shchitaDate, shchita: dayData });
-
-  // Method 1: no-cors (always fires, no CORS error, no response)
-  fetch(url, { method:'POST', mode:'no-cors', body: payload }).catch(()=>{});
-
-  // Method 2: try with cors to verify (might fail on CORS but body still received by GAS)
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: payload
-    });
-    toast('✅ שחיטה בפועל סונכרנה לענן — ' + shchitaDate.split('-').reverse().join('.'));
-  } catch(e) {
-    // CORS error is expected — the no-cors request already sent the data
-    toast('✅ שחיטה בפועל נשלחה לגוגל שיטס');
+  for (const [slaughter, qty] of Object.entries(dayData)) {
+    const payload = JSON.stringify({ type: 'shchita', date: shchitaDate, slaughter: slaughter, qty: qty });
+    try {
+      await fetch(urlWithToken(url), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: payload });
+    } catch(e) {}
   }
+  toast('✅ שחיטה בפועל סונכרנה לענן — ' + shchitaDate.split('-').reverse().join('.'));
 }
 
 function copyShchitaFromYesterday() {
@@ -3696,7 +3874,7 @@ function closePlanModal() {
   planEditCtx = null;
 }
 
-function savePlanTarget() {
+async function savePlanTarget() {
   if (!requirePermission('planWrite')) return;
   if (!planEditCtx) return;
   const { dateKey, bucket } = planEditCtx;
@@ -3721,14 +3899,12 @@ function savePlanTarget() {
 
   const url = getGsUrl();
   if (url) {
-    fetch(url, {
-      method: 'POST', mode: 'no-cors',
-      body: JSON.stringify({ type: 'tochnit', date: dateKey, slaughter, qty: val })
-    }).catch(() => {});
-    fetch(url, {
-      method: 'POST', mode: 'no-cors',
-      body: JSON.stringify({ type: 'derishott', date: dateKey, derishott: getDerishott()[dateKey] || {} })
-    }).catch(() => {});
+    // שלח באותו פורמט כמו שחיטה — מפה של {משחטה: כמות} כדי שה־Apps Script יפרק לעמודות נפרדות
+    const payload = JSON.stringify({ type: 'tochnit', date: dateKey, slaughter: slaughter, qty: val });
+    try {
+      await fetch(urlWithToken(url), { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: payload });
+    } catch(e) {}
+    // derishott не имеет отдельного листа в GAS — пропускаем
   }
 }
 
@@ -3748,7 +3924,7 @@ function renderPlanView() {
   const planKeys = Object.keys(plan);
   const shchitaAll = getShchita();
   const shchitaKeys = Object.keys(shchitaAll);
-  console.log('renderPlanView: Plan dates:', planKeys.length, '| Shchita dates:', shchitaKeys.length);
+  dlog('renderPlanView: Plan dates:', planKeys.length, '| Shchita dates:', shchitaKeys.length);
 
   // Build shchita map: dateKey -> slaughter -> qty (from שחיטה בפועל)
   const shchitaStorageAll = getShchita();
@@ -3799,8 +3975,10 @@ function renderPlanView() {
       const shchita = dayShchita[s] || 0;
       const effectiveActual = shchita;
       const pct = target > 0 ? Math.round(effectiveActual/target*100) : null;
-      const bg = pct === null ? '' : pct >= 100 ? '#E8F5E9' : pct >= 70 ? '#FFF8E1' : effectiveActual > 0 ? '#FFEBEE' : '';
-      const col = pct === null ? '' : pct >= 100 ? '#2E7D32' : pct >= 70 ? '#F57F17' : '#C62828';
+      // love.html logic: green 95-105%, yellow 85-115%, red otherwise (>15% deviation)
+      const dev = pct === null ? null : Math.abs(pct - 100);
+      const bg = pct === null ? '' : dev <= 5 ? '#E8F5E9' : dev <= 15 ? '#FFF8E1' : effectiveActual > 0 || target > 0 ? '#FFEBEE' : '';
+      const col = pct === null ? '' : dev <= 5 ? '#2E7D32' : dev <= 15 ? '#F57F17' : '#C62828';
       const safeSlaughter = escapeHtml(s);
       return `<td class="plan-grid-cell" data-plan-date="${dk}" data-plan-slaughter="${safeSlaughter}" style="padding:2px 3px; text-align:center; background:${bg}; cursor:pointer; border-left:1px solid #eee;">
         ${target ? `<div style="font-size:12px; font-weight:800; color:#1B5E20;">${(target/1000).toFixed(1)}k</div>` : `<div style="font-size:11px; color:#ccc;">—</div>`}
@@ -3813,7 +3991,7 @@ function renderPlanView() {
       <td style="padding:6px 8px; font-weight:${isToday?'900':'700'}; font-size:12px; white-space:nowrap; position:sticky; right:0; background:${rowBg||'var(--surface)'}; z-index:1; border-left:2px solid #ddd;">
         <span style="font-size:10px; color:#aaa; display:block;">${DAYS_HE[dow]}'</span>
         <span style="${isToday ? 'color:#1B5E20;' : isSaturday ? 'color:#E65100;' : ''}">${dd}/${mm}</span>
-        ${dayTotal > 0 ? `<div style="font-size:9px; color:${totalPct >= 100 ? '#2E7D32' : totalPct >= 70 ? '#F57F17' : totalPct !== null ? '#C62828' : '#888'}; font-weight:800; margin-top:1px;">${totalPct !== null ? totalPct+'%' : '✏️'}</div>` : ''}
+        ${dayTotal > 0 ? (() => { const d = totalPct === null ? null : Math.abs(totalPct - 100); const c = d === null ? '#888' : d <= 5 ? '#2E7D32' : d <= 15 ? '#F57F17' : '#C62828'; return `<div style="font-size:9px; color:${c}; font-weight:800; margin-top:1px;">${totalPct !== null ? totalPct+'%' : '✏️'}</div>`; })() : ''}
       </td>
       ${cells}
     </tr>`;
@@ -3910,6 +4088,22 @@ async function exportPlanVsActualExcel() {
       document.getElementById('planExcelCancel').onclick = () => { document.body.removeChild(overlay); resolve(null); };
     });
     if (!chosen) return;
+
+    // Refresh tochnit+shchita before building the report
+    toast('⏳ מושך נתונים מהענן...');
+    try {
+      const lv = await apiGetAllLove();
+      if (lv && lv.ok) {
+        if (Array.isArray(lv.tochnit) && lv.tochnit.length) {
+          const n=aggregateLove(lv.tochnit); const lo=getPlan();
+          Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); savePlan(lo);
+        }
+        if (Array.isArray(lv.shchita) && lv.shchita.length) {
+          const n=aggregateLove(lv.shchita); const loS=getShchita();
+          Object.entries(n).forEach(([dt,sl])=>{if(!loS[dt])loS[dt]={};Object.assign(loS[dt],sl);}); saveShchitaStorage(loS);
+        }
+      }
+    } catch(e) {}
 
     toast('⏳ מכין דוח...');
 
@@ -4162,11 +4356,12 @@ function getPlanVsActualForRange(startIso, endIso) {
 
   // שיווקים map: date -> slaughter -> qty
   const shivukimMap = {};
-  records.forEach(r => {
-    const d = getRecordDate(r); if (!d) return;
+  records.forEach(raw => {
+    const r = normalizeRecord(raw);
+    const d = r.parsedDate || getRecordDate(r); if (!d) return;
     const dk = getDateKey(d);
     if (!dates.includes(dk)) return;
-    const bucket = getPlanBucketForSlaughterhouse(r.slaughterhouse);
+    const bucket = canonicalSlaughter(r.slaughterhouse) || getPlanBucketForSlaughterhouse(r.slaughterhouse);
     if (!shivukimMap[dk]) shivukimMap[dk] = {};
     shivukimMap[dk][bucket] = (shivukimMap[dk][bucket] || 0) + (Number(r.quantity) || 0);
   });
@@ -4295,30 +4490,30 @@ async function exportPeriodExcel() {
       overlay.setAttribute('data-pm','');
       overlay.innerHTML=`
         <div style="background:var(--surface);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px;">
-          <div style="font-weight:800;font-size:18px;margin-bottom:2px;">📅 דוח תכנון מול ביצוע — תקופתי</div>
+          <div style="font-weight:800;font-size:18px;margin-bottom:2px;">דוח תכנון מול ביצוע — תקופתי</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;">תכנון שחיטה מול שחיטה בפועל לפי משחטות</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
             <button onclick="this.closest('[data-pm]').dataset.sel='wk'"
               style="padding:12px;border-radius:12px;border:2px solid #1B5E20;background:#E8F5E9;color:#1B5E20;font-weight:800;font-size:13px;cursor:pointer;">
-              📅 השבוע<br><span style="font-size:10px;font-weight:500;">${fmt(weekStart)} – ${fmt(weekEnd)}</span></button>
+              השבוע<br><span style="font-size:10px;font-weight:500;">${fmt(weekStart)} – ${fmt(weekEnd)}</span></button>
             <button onclick="this.closest('[data-pm]').dataset.sel='mo'"
               style="padding:12px;border-radius:12px;border:2px solid #1565C0;background:#E3F2FD;color:#1565C0;font-weight:800;font-size:13px;cursor:pointer;">
-              🗓 החודש<br><span style="font-size:10px;font-weight:500;">${fmt(monthStart)} – ${fmt(monthEnd)}</span></button>
+              החודש<br><span style="font-size:10px;font-weight:500;">${fmt(monthStart)} – ${fmt(monthEnd)}</span></button>
             <button onclick="this.closest('[data-pm]').dataset.sel='pwk'"
               style="padding:12px;border-radius:12px;border:2px solid #555;background:#f5f5f5;color:#333;font-weight:800;font-size:13px;cursor:pointer;">
-              ⬅️ שבוע שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevWS)} – ${fmt(prevWE)}</span></button>
+              שבוע שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevWS)} – ${fmt(prevWE)}</span></button>
             <button onclick="this.closest('[data-pm]').dataset.sel='pmo'"
               style="padding:12px;border-radius:12px;border:2px solid #555;background:#f5f5f5;color:#333;font-weight:800;font-size:13px;cursor:pointer;">
-              ⬅️ חודש שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevMS)} – ${fmt(prevME)}</span></button>
+              חודש שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevMS)} – ${fmt(prevME)}</span></button>
           </div>
           <div style="background:var(--bg);border-radius:12px;padding:10px 12px;border:1px solid var(--border);margin-bottom:12px;">
-            <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--text-secondary);">✏️ טווח מותאם:</div>
+            <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--text-secondary);">טווח מותאם:</div>
             <div style="display:flex;gap:8px;align-items:center;">
               <input type="date" id="prFrom" value="${iso(weekStart)}" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
               <span style="color:var(--text-secondary);">עד</span>
               <input type="date" id="prTo" value="${today}" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
-              <button onclick="this.closest('[data-pm]').dataset.sel='custom'"
-                style="padding:8px 12px;border-radius:8px;border:none;background:#1B5E20;color:#fff;font-weight:800;font-size:12px;cursor:pointer;">✔</button>
+              <button id="prCustomBtn" onclick="this.closest('[data-pm]').dataset.sel='custom';this.style.background='#1B5E20';this.style.color='#fff';this.style.borderColor='#1B5E20';"
+                style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#1B5E20;font-weight:800;font-size:14px;cursor:pointer;transition:all 0.2s;">✔</button>
             </div>
           </div>
           <div style="display:flex;gap:10px;">
@@ -4352,11 +4547,25 @@ async function exportPeriodExcel() {
         try{const r=await fetch(gsUrl+'?type=shivukim');const d=await r.json();if(Array.isArray(d))cd=d;}catch(e){}
         if(!cd){try{const r=await fetch(gsUrl);const d=await r.json();if(Array.isArray(d))cd=d;}catch(e){}}
         if(cd){const ids=new Set(cd.map(r=>r.id));records=[...cd,...records.filter(r=>r.status==='pending'&&!ids.has(r.id))];localStorage.setItem('poultry_manager_data',JSON.stringify(records));}
-        // שחיטה בפועל
-        try{const r=await fetch(gsUrl+'?type=shchita');const d=await r.json();if(d&&!d.error){const nested=cloudArrayToNestedMap(getCloudRowsOrMap(d));const lo=getShchita();Object.entries(nested).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});saveShchitaStorage(lo);}}catch(e){}
-        // תכנון + דרישות
-        try{const r=await fetch(gsUrl+'?type=derishott');const d=await r.json();if(d&&!d.error){saveDerishotStorage({...getDerishott(),...cloudArrayToNestedMap(getCloudRowsOrMap(d))});}}catch(e){}
-        try{const r=await fetch(gsUrl+'?type=tochnit');const d=await r.json();if(d&&!d.error){const nested=cloudArrayToNestedMap(getCloudRowsOrMap(d));const lo=getPlan();Object.entries(nested).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});savePlan(lo);}}catch(e){}
+        // שחיטה בפועל + תכנון — use love.html apiGetAll mechanism (token-auth, Israel TZ)
+        try {
+          const lv = await apiGetAllLove();
+          if (lv && lv.ok) {
+            if (Array.isArray(lv.tochnit) && lv.tochnit.length) {
+              const n=aggregateLove(lv.tochnit); const lo=getPlan();
+              Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); savePlan(lo);
+            }
+            if (Array.isArray(lv.shchita) && lv.shchita.length) {
+              const n=aggregateLove(lv.shchita); const lo=getShchita();
+              Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); saveShchitaStorage(lo);
+            }
+          } else {
+            // fallback: type= endpoints
+            try{const d=await fetchCloudJson(gsUrl+'?type=shchita');if(d&&!d.error){const n=cloudArrayToNestedMap(getCloudRowsOrMap(d));const lo=getShchita();Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});saveShchitaStorage(lo);}}catch(e){}
+            try{const d=await fetchCloudJson(gsUrl+'?type=derishott');if(d&&!d.error){saveDerishotStorage({...getDerishott(),...cloudArrayToNestedMap(getCloudRowsOrMap(d))});}}catch(e){}
+            try{const d=await fetchCloudJson(gsUrl+'?type=tochnit');if(d&&!d.error){const n=cloudArrayToNestedMap(getCloudRowsOrMap(d));const lo=getPlan();Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});savePlan(lo);}}catch(e){}
+          }
+        } catch(e) {}
       } catch(e) {}
     }
 
@@ -4419,13 +4628,13 @@ async function exportPeriodExcel() {
       const rowBg = i%2===0 ? 'FFF9FCF9' : 'FFFFFFFF';
 
       const row = ws1.getRow(cr++);
-      row.values = [s, d.planned||'—', d.shchita>0?d.shchita:'—', d.shivukim>0?d.shivukim:'—', pct, diff];
+      row.values = [s, d.planned||'—', d.shchita>0?d.shchita:'—', d.shivukim||0, pct, diff];
       row.height = 24;
       row.getCell(1).font = { bold:true };
       row.getCell(1).alignment = { horizontal:'right' };
       if (d.planned>0)   { row.getCell(2).numFmt='#,##0'; }
       if (d.shchita>0)   { row.getCell(3).numFmt='#,##0'; row.getCell(3).font={bold:true,color:{argb:'FF1565C0'}}; }
-      if (d.shivukim>0)  { row.getCell(4).numFmt='#,##0'; }
+      row.getCell(4).numFmt='#,##0'; row.getCell(4).font={bold:true,color:{argb:'FF546E7A'}};
       if (pct!==null)    { row.getCell(5).numFmt='0%'; row.getCell(5).font={bold:true,color:{argb:pctColor}}; }
       if (diff!==null)   { row.getCell(6).numFmt='+#,##0;-#,##0;0'; row.getCell(6).font={bold:true,color:{argb:diff>=0?'FF2E7D32':'FFC62828'}}; }
       row.eachCell((cell,col)=>{ if(col<=6){ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:rowBg}}; cell.border={top:{style:'thin',color:{argb:'FFD6E2D9'}},left:{style:'thin',color:{argb:'FFD6E2D9'}},bottom:{style:'thin',color:{argb:'FFD6E2D9'}},right:{style:'thin',color:{argb:'FFD6E2D9'}}}; cell.alignment={horizontal:'center',vertical:'middle'}; } });
@@ -4438,7 +4647,7 @@ async function exportPeriodExcel() {
     const totPct = totals.planned>0?totEffective/totals.planned:null;
     const totDiff= totals.planned>0?totEffective-totals.planned:null;
     const totRow = ws1.getRow(cr+1);
-    totRow.values = ['סה"כ', totals.planned||'—', totals.shchita>0?totals.shchita:'—', totals.shivukim>0?totals.shivukim:'—', totPct, totDiff];
+    totRow.values = ['סה"כ', totals.planned||'—', totals.shchita>0?totals.shchita:'—', totals.shivukim||0, totPct, totDiff];
     totRow.height = 28;
     totRow.eachCell((cell,col)=>{
       if(col>6)return;
@@ -4449,7 +4658,7 @@ async function exportPeriodExcel() {
     });
     if(totals.planned>0)   totRow.getCell(2).numFmt='#,##0';
     if(totals.shchita>0)   totRow.getCell(3).numFmt='#,##0';
-    if(totals.shivukim>0)  totRow.getCell(4).numFmt='#,##0';
+    totRow.getCell(4).numFmt='#,##0';
     if(totPct!==null)      totRow.getCell(5).numFmt='0%';
     if(totDiff!==null)     totRow.getCell(6).numFmt='+#,##0;-#,##0;0';
 
@@ -4470,7 +4679,7 @@ async function exportPeriodExcel() {
     const ws2 = wb.addWorksheet('פירוט יומי', { views:[{rightToLeft:true, state:'frozen', xSplit:1, ySplit:3}] });
     ws2.pageSetup = { orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0 };
 
-    const colsNeeded = 1 + slaughters.length * 2 + 1; // תאריך + (תכנון+ביצוע)×n + סה"כ
+    const colsNeeded = 1 + slaughters.length * 2 + 2; // תאריך + (תכנון+ביצוע)×n + (תכנון+ביצוע) סה"כ יומי
     ws2.mergeCells(1,1,1,colsNeeded);
     const h2t = ws2.getCell(1,1);
     h2t.value = `פירוט יומי — תכנון מול שחיטה בפועל | ${periodLabel}`;
@@ -4489,9 +4698,9 @@ async function exportPeriodExcel() {
       cell.alignment={horizontal:'center',vertical:'middle'};
       ci+=2;
     });
-    ws2.mergeCells(2,ci,2,ci);
+    ws2.mergeCells(2,ci,2,ci+1);
     const totHeader=ws2.getCell(2,ci);
-    totHeader.value='סה"כ'; totHeader.font={bold:true,color:{argb:'FFFFFFFF'}}; totHeader.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1B5E20'}}; totHeader.alignment={horizontal:'center'};
+    totHeader.value='סה"כ יומי'; totHeader.font={bold:true,color:{argb:'FFFFFFFF'}}; totHeader.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1B5E20'}}; totHeader.alignment={horizontal:'center',vertical:'middle'};
     ws2.getRow(2).height=22;
 
     // Row 3: sub-headers (תכנון / ביצוע per slaughterhouse)
@@ -4509,7 +4718,12 @@ async function exportPeriodExcel() {
       });
       ci+=2;
     });
-    ws2.getCell(3,ci).value='סה"כ יומי'; ws2.getCell(3,ci).font={bold:true,color:{argb:'FFFFFFFF'}}; ws2.getCell(3,ci).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1B5E20'}}; ws2.getCell(3,ci).alignment={horizontal:'center'};
+    ['תכנון','ביצוע'].forEach((label,j)=>{
+      const cell=ws2.getCell(3,ci+j);
+      cell.value=label; cell.font={bold:true,color:{argb:'FFFFFFFF'},size:10};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:j===0?'FF2E7D32':'FF0D47A1'}};
+      cell.alignment={horizontal:'center'};
+    });
     ws2.getRow(3).height=20;
 
     // Data rows
@@ -4527,18 +4741,23 @@ async function exportPeriodExcel() {
         vals.push(sd.planned||''); vals.push(eff||'');
         dayTotalPlan+=sd.planned; dayTotalEffective+=eff;
       });
-      vals.push(dayTotalEffective||'');
+      vals.push(dayTotalPlan||''); vals.push(dayTotalEffective||'');
       row.values=vals;
       const isToday=dayRow.date===getSafeIsoDate();
       const isSat=d.getDay()===6;
       const rowBg=isToday?'FFE8F5E9':isSat?'FFFFF3E0':idx%2===0?'FFF9FCF9':'FFFFFFFF';
+      const lastPlanCol = colsNeeded-1;
+      const lastEffCol = colsNeeded;
       row.eachCell((cell,col)=>{
         cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:rowBg}};
         cell.alignment={horizontal:'center',vertical:'middle'};
         cell.border={top:{style:'thin',color:{argb:'FFD6E2D9'}},left:{style:'thin',color:{argb:'FFD6E2D9'}},bottom:{style:'thin',color:{argb:'FFD6E2D9'}},right:{style:'thin',color:{argb:'FFD6E2D9'}}};
         if(typeof cell.value==='number') cell.numFmt='#,##0';
-        // Color ביצוע columns blue
+        // Color ביצוע columns blue (per-slaughter)
         if(col>1&&col<=1+slaughters.length*2&&(col-1)%2===0) { if(cell.value>0) cell.font={bold:true,color:{argb:'FF1565C0'}}; }
+        // Bold daily totals
+        if(col===lastPlanCol && cell.value>0) cell.font={bold:true,color:{argb:'FF2E7D32'}};
+        if(col===lastEffCol && cell.value>0) cell.font={bold:true,color:{argb:'FF0D47A1'}};
       });
       row.getCell(1).font={bold:isToday,color:{argb:isToday?'FF1B5E20':isSat?'FFE65100':'FF333333'}};
     });
@@ -4546,17 +4765,23 @@ async function exportPeriodExcel() {
     // Totals row
     const totR=ws2.getRow(r4);
     const totVals=['סה"כ'];
-    let grandEff=0;
+    let grandEff=0, grandPlan=0;
     slaughters.forEach(s=>{
       totVals.push(bySlaughter[s].planned||'');
       const eff=bySlaughter[s].effective||getEffectivePerformanceQty(bySlaughter[s].shchita,bySlaughter[s].shivukim);
-      totVals.push(eff||''); grandEff+=eff;
+      totVals.push(eff||''); grandEff+=eff; grandPlan+=bySlaughter[s].planned||0;
     });
-    totVals.push(grandEff||'');
+    totVals.push(grandPlan||''); totVals.push(grandEff||'');
     totR.values=totVals; totR.height=26;
+    const lastPlanColT = colsNeeded-1;
+    const lastEffColT = colsNeeded;
     totR.eachCell((cell,col)=>{
       cell.font={bold:true,color:{argb:'FFFFFFFF'},size:12};
-      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:col>1&&col<=1+slaughters.length*2&&(col-1)%2===0?'FF1565C0':'FF1B5E20'}};
+      let bg='FF1B5E20';
+      if(col>1&&col<=1+slaughters.length*2&&(col-1)%2===0) bg='FF1565C0';
+      else if(col===lastPlanColT) bg='FF2E7D32';
+      else if(col===lastEffColT) bg='FF0D47A1';
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};
       cell.alignment={horizontal:'center',vertical:'middle'};
       if(typeof cell.value==='number') cell.numFmt='#,##0';
     });
@@ -4564,7 +4789,7 @@ async function exportPeriodExcel() {
     // Column widths for ws2
     ws2.getColumn(1).width=14;
     ci=2; slaughters.forEach(()=>{ ws2.getColumn(ci).width=11; ws2.getColumn(ci+1).width=11; ci+=2; });
-    ws2.getColumn(ci).width=13;
+    ws2.getColumn(ci).width=12; ws2.getColumn(ci+1).width=12;
 
     const buffer = await wb.xlsx.writeBuffer();
     downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
@@ -4627,22 +4852,24 @@ try {
         try {
           const rawResp = await fetchCloudJson(url);
           if (rawResp) {
-            console.log('Cloud response type:', typeof rawResp, Array.isArray(rawResp) ? 'ARRAY' : 'NOT ARRAY');
-            console.log('Cloud response keys:', Object.keys(rawResp).slice(0, 20).join(', '));
+            dlog('Cloud response type:', typeof rawResp, Array.isArray(rawResp) ? 'ARRAY' : 'NOT ARRAY');
+            dlog('Cloud response keys:', Object.keys(rawResp).slice(0, 20).join(', '));
             if (rawResp.data && Array.isArray(rawResp.data)) {
               cloudData = rawResp.data;
-              console.log('Found data inside .data property:', cloudData.length, 'records');
+              dlog('Found data inside .data property:', cloudData.length, 'records');
             } else if (rawResp.records && Array.isArray(rawResp.records)) {
               cloudData = rawResp.records;
-              console.log('Found data inside .records property:', cloudData.length, 'records');
+              dlog('Found data inside .records property:', cloudData.length, 'records');
             } else if (rawResp.shivukim && Array.isArray(rawResp.shivukim)) {
               cloudData = rawResp.shivukim;
-              console.log('Found data inside .shivukim property:', cloudData.length, 'records');
+              dlog('Found data inside .shivukim property:', cloudData.length, 'records');
             } else {
               // Show what we got so user can report
               const sampleStr = JSON.stringify(rawResp).substring(0, 500);
               console.error('Cloud returned unexpected format:', sampleStr);
-              alert('⚠️ ДИАГНОСТИКА: Облако вернуло данные, но не в формате массива.\n\nВот что пришло:\n' + sampleStr + '\n\nСкопируйте это и отправьте разработчику.');
+              if (rawResp.ok !== false) {
+                alert('⚠️ ДИАГНОСТИКА: Облако вернуло данные, но не в формате массива.\n\nВот что пришло:\n' + sampleStr + '\n\nСкопируйте это и отправьте разработчику.');
+              }
             }
           }
         } catch(e2) {
@@ -4657,8 +4884,8 @@ try {
         // Log first record structure for debugging
         if (cloudData.length > 0) {
           const first = cloudData[0];
-          console.log('Cloud data loaded:', cloudData.length, 'records');
-          console.log('First record:', JSON.stringify(first, null, 2));
+          dlog('Cloud data loaded:', cloudData.length, 'records');
+          dlog('First record:', JSON.stringify(first, null, 2));
         }
 
         const ids = new Set(cloudData.map(r=>r.id));
@@ -4666,43 +4893,71 @@ try {
         localStorage.setItem('poultry_manager_data', JSON.stringify(records));
 
         // שיווק הם שיווק בלבד — תכנון ושחיטה נטענים רק מהגיליונות הייעודיים שלהם
-        console.log('Startup: shivukim loaded:', cloudData.length, 'records (no auto-fill to plan/shchita)');
+        dlog('Startup: shivukim loaded:', cloudData.length, 'records (no auto-fill to plan/shchita)');
       }
       // דרישות
       showCloudOverlay('טוען דרישות יומיות...');
       try { const d=await fetchCloudJson(url+'?type=derishott'); if(d&&!d.error&&Object.keys(d).length>0){ const nested=cloudArrayToNestedMap(d); if(typeof nested==='object'&&Object.keys(nested).length>0){ const m={...getDerishott(),...nested}; saveDerishotStorage(m); } } } catch(e){}
-      // תכנון — נטען רק מגיליון tochnit (לא מושפע משיווק)
-      showCloudOverlay('טוען תוכנית...');
+      // ── תכנון + שחיטה: love.html approach first (action=getall), then type= fallback ──
+      showCloudOverlay('טוען תוכנית ושחיטה...');
       try {
-        const d = await fetchCloudJson(url+'?type=tochnit');
-        console.log('Startup tochnit raw:', JSON.stringify(d).substring(0,200));
-        if(d && !d.error) {
-          const arr = getCloudRowsOrMap(d);
-          const nested = cloudArrayToNestedMap(arr);
-          console.log('Startup tochnit nested dates:', Object.keys(nested).length);
-          if(Object.keys(nested).length > 0) {
-            const lo = getPlan();
-            Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
-            savePlan(lo);
+        // Primary: use love.html's proven getall mechanism (Israel-TZ, token-auth)
+        const loveData = await apiGetAllLove();
+        dlog('Startup apiGetAllLove:', loveData ? (loveData.ok ? 'ok' : 'error:'+loveData.error) : 'null');
+        if (loveData && loveData.ok) {
+          // ── tochnit from getall ──
+          if (Array.isArray(loveData.tochnit) && loveData.tochnit.length > 0) {
+            const nested = aggregateLove(loveData.tochnit);
+            dlog('Startup getall tochnit dates:', Object.keys(nested).length);
+            if (Object.keys(nested).length > 0) {
+              const lo = getPlan();
+              Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
+              savePlan(lo);
+            }
           }
-        }
-      } catch(e){ console.warn('Startup tochnit error:', e); }
-      // שחיטה בפועל — נטען רק מגיליון shchita (לא מושפע משיווק)
-      showCloudOverlay('טוען שחיטה בפועל...');
-      try {
-        const d = await fetchCloudJson(url+'?type=shchita');
-        console.log('Startup shchita raw:', JSON.stringify(d).substring(0,200));
-        if(d && !d.error) {
-          const arr = getCloudRowsOrMap(d);
-          const nested = cloudArrayToNestedMap(arr);
-          console.log('Startup shchita nested dates:', Object.keys(nested).length);
-          if(Object.keys(nested).length > 0) {
-            const lo = getShchita();
-            Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
-            saveShchitaStorage(lo);
+          // ── shchita from getall ──
+          if (Array.isArray(loveData.shchita) && loveData.shchita.length > 0) {
+            const nested = aggregateLove(loveData.shchita);
+            dlog('Startup getall shchita dates:', Object.keys(nested).length);
+            if (Object.keys(nested).length > 0) {
+              const lo = getShchita();
+              Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
+              saveShchitaStorage(lo);
+            }
           }
+        } else {
+          // Fallback: type= based endpoints (production URL)
+          dlog('Startup: falling back to type= endpoints');
+          try {
+            const d = await fetchCloudJson(url+'?type=tochnit');
+            dlog('Startup tochnit raw:', JSON.stringify(d).substring(0,200));
+            if(d && !d.error) {
+              const arr = getCloudRowsOrMap(d);
+              const nested = cloudArrayToNestedMap(arr);
+              dlog('Startup tochnit nested dates:', Object.keys(nested).length);
+              if(Object.keys(nested).length > 0) {
+                const lo = getPlan();
+                Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
+                savePlan(lo);
+              }
+            }
+          } catch(e){ dwarn('Startup tochnit error:', e); }
+          try {
+            const d = await fetchCloudJson(url+'?type=shchita');
+            dlog('Startup shchita raw:', JSON.stringify(d).substring(0,200));
+            if(d && !d.error) {
+              const arr = getCloudRowsOrMap(d);
+              const nested = cloudArrayToNestedMap(arr);
+              dlog('Startup shchita nested dates:', Object.keys(nested).length);
+              if(Object.keys(nested).length > 0) {
+                const lo = getShchita();
+                Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
+                saveShchitaStorage(lo);
+              }
+            }
+          } catch(e){ dwarn('Startup shchita error:', e); }
         }
-      } catch(e){ console.warn('Startup shchita error:', e); }
+      } catch(e){ dwarn('Startup tochnit/shchita error:', e); }
       render();
       if (document.getElementById('planDailyGrid')) renderPlanView();
       if (document.getElementById('derishotGrid')) renderDerishotGrid();
