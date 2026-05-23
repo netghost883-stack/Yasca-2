@@ -452,7 +452,7 @@ function initLogoImages() {
 // ── CLOUD CONFIG ─────────────────────────────────────────────────────────────
 // test     = тестовая таблица (безопасно для экспериментов)
 // production = основная база (НЕ трогать при отладке)
-const CLOUD_SOURCE = 'test';
+const CLOUD_SOURCE = 'production';
 const DEBUG = false;
 const dlog = (...a) => { if (DEBUG) dlog(...a); };
 const dwarn = (...a) => { if (DEBUG) dwarn(...a); };
@@ -1030,7 +1030,7 @@ function urlWithToken(url) {
 }
 
 // Fetches both tochnit and shchita in one call — the same way love.html does.
-// Uses TEST_SYNC_URL (the new token-auth backend for tochnit/shchita). Returns {ok, tochnit:[], shchita:[]} or null.
+// Uses TEST_SYNC_URL (same script as love.html). Returns {ok, tochnit:[], shchita:[]} or null.
 async function apiGetAllLove() {
   const loveUrl = TEST_SYNC_URL;
   if (!loveUrl) return null;
@@ -1645,12 +1645,11 @@ async function pullFromCloud() {
       dlog('pullFromCloud: shivukim loaded:', cloudData.length, 'records (no auto-fill to plan/shchita)');
 
       render();
-      toast(`✅ שיווקים סונכרן — ${cloudData.length} רשומות`);
+      toast(`✅ סונכרן — ${cloudData.length} רשומות`);
     } else {
-      // Shivukim data unavailable (backend may not support it or requires different endpoint)
-      // Do NOT abort — continue loading tochnit/shchita below
-      dlog('pullFromCloud: shivukim not available from this endpoint, continuing with tochnit/shchita');
-      toast('ℹ️ שיווקים: אין נתונים — ממשיך לתכנון/שחיטה');
+      alert('לא התקבלו נתונים מהענן.\n\n1. פתחו את הקישור בהגדרות בטאב חדש — צריך לראות טקסט JSON (מתחיל ב־[ או {).\n2. אם מופיע "דף לא נמצא" — העתיקו שוב את הקישור מ־Apps Script → ניהול פריסות.\n3. בפריסה: גישה = כולם (Anyone).');
+      toast('❌ לא התקבלו נתונים מהענן');
+      return;
     }
 
     // Pull דרישות (only if new script installed)
@@ -1720,7 +1719,6 @@ async function pullFromCloud() {
     if (document.getElementById('derishotGrid')) renderDerishotGrid();
     if (document.getElementById('planDailyGrid')) renderPlanView();
     if (document.getElementById('shchitaGrid')) renderShchitaGrid();
-    toast('✅ תכנון ושחיטה סונכרנו מהענן');
 
   } catch (e) {
     alert('שגיאה במשיכת נתונים מהענן:\n' + e.message);
@@ -3761,6 +3759,7 @@ async function saveShchitaData() {
 
   for (const [slaughter, qty] of Object.entries(dayData)) {
     const payload = JSON.stringify({ type: 'shchita', date: shchitaDate, slaughter: slaughter, qty: qty });
+    fetch(urlWithToken(url), { method: 'POST', mode: 'no-cors', body: payload }).catch(() => {});
     try {
       await fetch(urlWithToken(url), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: payload });
     } catch(e) {}
@@ -3901,6 +3900,7 @@ async function savePlanTarget() {
   if (url) {
     // שלח באותו פורמט כמו שחיטה — מפה של {משחטה: כמות} כדי שה־Apps Script יפרק לעמודות נפרדות
     const payload = JSON.stringify({ type: 'tochnit', date: dateKey, slaughter: slaughter, qty: val });
+    fetch(urlWithToken(url), { method: 'POST', mode: 'no-cors', body: payload }).catch(() => {});
     try {
       await fetch(urlWithToken(url), { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: payload });
     } catch(e) {}
@@ -4867,9 +4867,7 @@ try {
               // Show what we got so user can report
               const sampleStr = JSON.stringify(rawResp).substring(0, 500);
               console.error('Cloud returned unexpected format:', sampleStr);
-              if (rawResp.ok !== false) {
-                alert('⚠️ ДИАГНОСТИКА: Облако вернуло данные, но не в формате массива.\n\nВот что пришло:\n' + sampleStr + '\n\nСкопируйте это и отправьте разработчику.');
-              }
+              alert('⚠️ ДИАГНОСТИКА: Облако вернуло данные, но не в формате массива.\n\nВот что пришло:\n' + sampleStr + '\n\nСкопируйте это и отправьте разработчику.');
             }
           }
         } catch(e2) {
