@@ -2,8 +2,10 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="referrer" content="no-referrer">
 <title>ניהול שווקים של יסכה רפאל</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -164,6 +166,7 @@ body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color
 
   <div style="padding: 0 16px 10px; display: flex; gap: 10px;">
     <button class="rec-btn" style="background:#E3F2FD; color:#C62828; border-color:#FFCDD2;" onclick="pullFromCloud()">📥 משוך מהענן</button>
+    <button class="rec-btn" id="pendingBtn" style="display:none; background:#FFF3E0; color:#EF6C00; border-color:#FFE0B2;" onclick="manualFlush()">🔄 ממתין (<span id="pendingCount">0</span>)</button>
     <button class="rec-btn" onclick="copyYesterday()">📋 העתק מאתמול</button>
     <button class="btn" style="flex: 1.5;" onclick="openModal()">+ שיווק חדש</button>
   </div>
@@ -268,6 +271,7 @@ body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color
     <button onclick="planPrevMonth()" style="padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:none; color:var(--text); font-weight:800; cursor:pointer;">◀</button>
     <button onclick="planNextMonth()" style="padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:none; color:var(--text); font-weight:800; cursor:pointer;">▶</button>
     <button onclick="planToday()" style="padding:8px 12px; border-radius:10px; border:none; background:#E8F5E9; color:#1B5E20; font-weight:800; font-size:12px; cursor:pointer;">היום</button>
+    <button onclick="openShchitaModal()" style="padding:8px 14px; border-radius:10px; border:none; background:#1565C0; color:#fff; font-weight:800; font-size:12px; cursor:pointer;">✅ שחיטה בפועל</button>
     <button onclick="exportPlanExcel()" style="margin-right:auto; padding:8px 14px; border-radius:10px; border:none; background:#217346; color:#fff; font-weight:800; font-size:12px; cursor:pointer;">📊 יצוא Excel</button>
   </div>
 
@@ -283,9 +287,9 @@ body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color
       <h3 id="planModalTitle" style="font-size:16px; font-weight:800;"></h3>
       <button onclick="closePlanModal()" style="border:none; background:none; font-size:24px; cursor:pointer;">✕</button>
     </div>
-    <div id="planModalSub" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;"></div>
-    <div id="planModalHint" style="font-size:11px; color:var(--text-secondary); line-height:1.6; margin-bottom:12px; padding:10px 12px; background:var(--bg); border-radius:10px; border:1px solid var(--border);"></div>
-    <label style="font-size:12px; font-weight:700; display:block; margin-bottom:8px;">יעד תכנון (כמות עופות)</label>
+    <div id="planModalSub" style="font-size:12px; color:var(--text-secondary); margin-bottom:16px;"></div>
+    <div id="planHolidaySection" style="margin-bottom:4px;"></div>
+    <label style="font-size:12px; font-weight:700; display:block; margin-bottom:8px;">יעד דרישה (כמות עופות)</label>
     <input id="planTargetInput" type="number" inputmode="numeric" placeholder="הכנס כמות..."
       style="width:100%; padding:16px; border-radius:12px; border:2px solid var(--border); background:var(--surface); color:var(--text); font-size:22px; font-weight:800; text-align:center; margin-bottom:8px;">
     <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;" id="planQuickBtns"></div>
@@ -300,8 +304,7 @@ body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color
 
   <div style="background:var(--surface); padding:20px; border-radius:20px; box-shadow:var(--shadow); margin-bottom:16px;">
     <div style="font-weight:800; font-size:16px; margin-bottom:14px; color:var(--primary);">🔗 סנכרון גוגל</div>
-    <div id="cloudSourceBanner"></div>
-    <label style="display:block; margin-bottom:8px; font-weight:700; font-size:13px;">כתובת Web App (סנכרון)</label>
+    <label style="display:block; margin-bottom:8px; font-weight:700; font-size:13px;">כתובת סנכרון</label>
     <input class="rec-btn" id="gsUrl" style="width:100%; text-align:left; padding:12px; font-weight:normal; margin-bottom:12px;" oninput="saveGsUrl()">
     <label style="display:block; margin-bottom:8px; font-weight:700; font-size:13px;">☁️ סנכרון אוטומטי</label>
     <select id="autoSyncSelect" onchange="saveAutoSync()" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:14px;">
@@ -336,6 +339,11 @@ body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color
       <button class="rec-btn" style="flex:1;" onclick="document.getElementById('restoreFile').click()">📤 שחזור</button>
       <input type="file" id="restoreFile" style="display:none" onchange="restoreData(event)">
     </div>
+  </div>
+
+  <div id="usersAdminCard" style="display:none; background:var(--surface); padding:20px; border-radius:20px; box-shadow:var(--shadow); margin-bottom:16px;">
+    <div style="font-weight:800; font-size:16px; margin-bottom:14px; color:var(--primary);">👥 ניהול משתמשים</div>
+    <div id="usersAdminBody"></div>
   </div>
 
   <div style="background:var(--surface); padding:20px; border-radius:20px; box-shadow:var(--shadow);">
@@ -449,19 +457,86 @@ function initLogoImages() {
     headerLogo.src = LOGO_DATA_URL;
   }
 }
-// ── CLOUD CONFIG ─────────────────────────────────────────────────────────────
-// test     = тестовая таблица (безопасно для экспериментов)
-// production = основная база (НЕ трогать при отладке)
-const CLOUD_SOURCE = 'production';
-const DEBUG = false;
-const dlog = (...a) => { if (DEBUG) dlog(...a); };
-const dwarn = (...a) => { if (DEBUG) dwarn(...a); };
-const PRODUCTION_SYNC_URL = 'https://script.google.com/macros/s/AKfycbz25N6oA-t01yqdm0_hwwxXIln4y-9PwXr0uCjIZ33aDUixc66ad-MoycdY9Bi9T1Ie/exec';
-const TEST_SPREADSHEET_ID = '1gKrP8nvHU2GHR3g2xlnW-SGH3WNgn5H2pA5sKF6gXdg';
-const TEST_SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/' + TEST_SPREADSHEET_ID + '/edit';
-// После развертывания Web App из ТЕСТОВОЙ таблицы — вставьте URL сюда (см. google-apps-script/README.md):
-const TEST_SYNC_URL = 'https://script.google.com/macros/s/AKfycbzdDJgVd2QXIkrS-vWkvGPKKPonOoCIVINWXjzYZ59G7SXsx-6BAn9_45o1QbWpV1bC/exec';
-const MASTER_URL = CLOUD_SOURCE === 'test' ? (TEST_SYNC_URL || '') : PRODUCTION_SYNC_URL;
+// ⚠️ ver 2: вставь сюда /exec URL деплоя Apps Script ver 2 (может остаться прежним,
+// если ты просто обновишь существующий деплой новой версией кода).
+const MASTER_URL = 'https://script.google.com/macros/s/AKfycbzdDJgVd2QXIkrS-vWkvGPKKPonOoCIVINWXjzYZ59G7SXsx-6BAn9_45o1QbWpV1bC/exec';
+
+// ⚠️ Должен ПОБУКВЕННО совпадать с TOKEN в AppsScript ver 2.gs
+const CLOUD_TOKEN = 'yasca-2026-CHANGE-ME';
+
+// Строит URL с токеном (и опционально ?type=) — используется всеми GET-запросами.
+function cloudUrl(type) {
+  let u = MASTER_URL + '?token=' + encodeURIComponent(CLOUD_TOKEN);
+  if (type) u += '&type=' + encodeURIComponent(type);
+  return u;
+}
+
+// Честный POST: text/plain => браузер НЕ делает preflight => мы читаем JSON-ответ сервера.
+// Бросает исключение, если сервер вернул не ok. Токен и юзер добавляются автоматически.
+async function cloudPost(payload) {
+  const res = await fetch(MASTER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({}, payload, {
+      token: CLOUD_TOKEN,
+      user: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.username : '',
+      role: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.role : ''
+    }))
+  });
+  let data;
+  try { data = await res.json(); }
+  catch (e) { throw new Error('Сервер вернул не JSON (проверь деплой Web App)'); }
+  if (!data || data.ok !== true) throw new Error((data && data.error) || 'Сервер отклонил запрос');
+  return data;
+}
+
+// ───────── Офлайн-очередь синхронизации ─────────
+const SYNC_QUEUE_KEY = 'poultry_sync_queue';
+function getSyncQueue() { try { return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]'); } catch { return []; } }
+function saveSyncQueue(q) { try { localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q)); } catch (e) {} updatePendingBadge(); }
+function enqueueSync(payload) { const q = getSyncQueue(); q.push({ payload, ts: Date.now() }); saveSyncQueue(q); }
+
+let _flushing = false;
+async function flushSyncQueue() {
+  if (_flushing) return { sent: 0, left: getSyncQueue().length };
+  _flushing = true;
+  try {
+    let q = getSyncQueue();
+    const remaining = [];
+    let sent = 0;
+    for (const item of q) {
+      try {
+        await cloudPost(item.payload);
+        sent++;
+        if (item.payload && item.payload.type === 'shivukim' && item.payload.id) {
+          const idx = records.findIndex(r => r.id === item.payload.id);
+          if (idx !== -1 && item.payload.action !== 'delete') { records[idx].status = 'sent'; }
+        }
+      } catch (e) { remaining.push(item); }
+    }
+    if (sent && typeof records !== 'undefined' && records) {
+      try { localStorage.setItem('poultry_manager_data', JSON.stringify(records)); } catch (e) {}
+      render();
+    }
+    saveSyncQueue(remaining);
+    return { sent, left: remaining.length };
+  } finally { _flushing = false; }
+}
+
+function updatePendingBadge() {
+  const n = getSyncQueue().length;
+  const btn = document.getElementById('pendingBtn');
+  const cnt = document.getElementById('pendingCount');
+  if (cnt) cnt.textContent = n;
+  if (btn) btn.style.display = n ? 'inline-block' : 'none';
+}
+
+async function manualFlush() {
+  if (!getSyncQueue().length) { toast('✅ אין רשומות ממתינות'); return; }
+  toast('🔄 מסנכרן ממתינים...');
+  const { sent, left } = await flushSyncQueue();
+  toast(left ? `⚠️ נשלחו ${sent}, נותרו ${left}` : `✅ כל ${sent} הרשומות סונכרנו`);
+}
 const TAB_NAMES = ['home', 'history', 'statistics', 'reports', 'plan', 'settings'];
 const PERIOD_OPTIONS = [
   { key: 'day', label: 'היום' },
@@ -481,129 +556,228 @@ let currentTab = 'home';
 let statisticsState = { period: 'day', groupBy: 'farm' };
 
 function normalizeSettings(rawSettings) {
-  const normalized = { dark: false, gsUrl: getGsUrl(), ...(rawSettings || {}) };
-  if (CLOUD_SOURCE === 'production') {
-    normalized.gsUrl = PRODUCTION_SYNC_URL;
-  } else if (TEST_SYNC_URL) {
-    normalized.gsUrl = TEST_SYNC_URL;
-  } else if (normalized.gsUrl === PRODUCTION_SYNC_URL) {
-    normalized.gsUrl = '';
-  }
+  const normalized = { dark: false, gsUrl: MASTER_URL, ...(rawSettings || {}) };
+  normalized.gsUrl = MASTER_URL;
   return normalized;
 }
 
 function getGsUrl() {
-  if (CLOUD_SOURCE === 'production') return PRODUCTION_SYNC_URL;
-  const saved = (settings && settings.gsUrl) ? String(settings.gsUrl).trim() : '';
-  if (saved && saved !== PRODUCTION_SYNC_URL) return saved;
-  if (TEST_SYNC_URL) return TEST_SYNC_URL;
-  return '';
-}
-
-function isTestCloudMode() {
-  return CLOUD_SOURCE === 'test';
-}
-
-function renderCloudSourceBanner() {
-  const el = document.getElementById('cloudSourceBanner');
-  if (!el) return;
-  if (CLOUD_SOURCE === 'test') {
-    const url = getGsUrl();
-    el.innerHTML = `
-      <div style="background:#FFF8E1; border:1px solid #FFE082; border-radius:12px; padding:12px; margin-bottom:12px; font-size:12px; line-height:1.6;">
-        <b style="color:#E65100;">🧪 מצב בדיקות — טבלת Google נפרדת</b><br>
-        <a href="${TEST_SPREADSHEET_URL}" target="_blank" rel="noopener" style="color:#1565C0;">פתח גיליון בדיקות</a>
-        ${url ? `<br><span style="word-break:break-all;">Web App: ${escapeHtml(url)}</span>` : '<br><span style="color:#C62828;">חסר קישור Web App — הדבק ב־TEST_SYNC_URL או בשדה למטה</span>'}
-      </div>`;
-  } else {
-    el.innerHTML = `
-      <div style="background:#E8F5E9; border:1px solid #C8E6C9; border-radius:12px; padding:12px; margin-bottom:12px; font-size:12px;">
-        <b style="color:#1B5E20;">☁️ מצב ייצור — מסד נתונים ראשי</b>
-      </div>`;
-  }
+  return MASTER_URL;
 }
 
 async function fetchCloudJson(url) {
-  // Helper: try to parse JSON from a fetch response, handling GAS HTML redirect
-  async function tryFetchJson(fetchUrl, depth) {
-    if (depth > 3) throw new Error('Слишком много редиректов Google Apps Script');
-    let response;
-    try {
-      response = await fetch(fetchUrl);
-    } catch (e) {
-      throw new Error('Не удалось подключиться к Google Apps Script. Проверь, что Web App опубликован с доступом Anyone / Anyone with the link, и что в Apps Script есть функция doGet(e).');
-    }
-    const text = await response.text();
-
-    // Try direct JSON parse
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      // Not JSON — check for GAS HTML redirect (common in incognito / first visit)
-      // GAS redirect patterns: top.location.href='...', location.href='...', meta refresh, or user_content_key redirect
-      const redirectPatterns = [
-        /top\.location\.href\s*=\s*'([^']+)'/,
-        /location\.href\s*=\s*'([^']+)'/,
-        /window\.location\.replace\s*\(\s*'([^']+)'\s*\)/,
-        /<meta[^>]*http-equiv="refresh"[^>]*content="[^;]*;url=([^"]+)"/i,
-        /<a[^>]*href="([^"]*script\.google\.com[^"]*user_content_key[^"]*)"/i
-      ];
-      for (const pattern of redirectPatterns) {
-        const match = text.match(pattern);
-        if (match && match[1]) {
-          // Follow the redirect and try again
-          return await tryFetchJson(match[1], depth + 1);
-        }
-      }
-
-      // Check for specific error patterns
-      if (text.includes('doGet')) {
-        throw new Error('Google Apps Script не отдаёт данные: не найдена функция doGet. Нужно обновить код Apps Script и заново опубликовать Web App.');
-      }
-      if (text.includes('לא נמצא') || text.includes('does not exist') || text.trim().startsWith('<!DOCTYPE')) {
-        throw new Error('קישור Web App לא תקין (Google מחזיר "דף לא נמצא").\n\nפתחו: גיליון בדיקות → Расширения → Apps Script → פרסום → ניהול פריסות → העתיקו את כל כתובת "אפליקציית אינטרנט" (מסתיימת ב־/exec) והדביקו בהגדרות.');
-      }
-      throw new Error('Google Apps Script вернул не JSON. Проверьте: Web App опубликован, доступ «Все» (Anyone), ссылка скопирована целиком до /exec.');
-    }
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (e) {
+    throw new Error('Не удалось подключиться к Google Apps Script. Проверь, что Web App опубликован с доступом Anyone / Anyone with the link, и что в Apps Script есть функция doGet(e).');
   }
-
-  return await tryFetchJson(url, 0);
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    if (text.includes('doGet')) {
+      throw new Error('Google Apps Script не отдаёт данные: не найдена функция doGet. Нужно обновить код Apps Script и заново опубликовать Web App.');
+    }
+    throw new Error('Google Apps Script вернул не JSON, а другой ответ. Проверь публикацию Web App и доступ Anyone with the link.');
+  }
 }
 
+// Passwords stored as SHA-256 hashes (never plaintext)
 const AUTH_USERS = [
-  { username: 'admin', password: '3216', role: 'admin', label: 'Admin' },
-  { username: 'Roi', password: '1234', role: 'operator', label: 'Shivukim' },
-  { username: 'gest', password: '1111', role: 'viewer', label: 'View only' }
+  { username: 'admin',  passwordHash: '7b31c40281e40541b60824340375dc4d70b2b8da0ec6c73a0f136a3d13173cf4', role: 'admin',    label: 'Admin' },
+  { username: 'Roi',    passwordHash: 'edee29f882543b956620b26d0ee0e7e950399b1c4222f5de05e06425b4c995e9', role: 'operator', label: 'Shivukim' },
+  { username: 'Sason',  passwordHash: '40f8cf02199b4981a3eccd39cf05e0a98dd5860ad8c5bcff2f7d602412b59989', role: 'manager',  label: 'Sason' },
+  { username: 'guest',  passwordHash: '318aee3fed8c9d040d35a7fc1fa776fb31303833aa2de885354ddf3d44d8fb69', role: 'guest',    label: 'Guest' }
 ];
+
+// Brute-force protection: persist failed login attempts across reloads.
+const LOGIN_LOCK_KEY = 'poultry_login_lock';
+function _loadLoginState() {
+  try {
+    const state = JSON.parse(localStorage.getItem(LOGIN_LOCK_KEY) || '{}');
+    return { fails: Number(state.fails) || 0, lockedUntil: Number(state.lockedUntil) || 0 };
+  } catch (e) {
+    return { fails: 0, lockedUntil: 0 };
+  }
+}
+function _saveLoginState(state) {
+  try { localStorage.setItem(LOGIN_LOCK_KEY, JSON.stringify(state)); } catch (e) {}
+}
+const _loginState = _loadLoginState();
+
+async function _sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Session auto-logout after 30 min inactivity
+let _sessionTimer = null;
+function _resetSessionTimer() {
+  clearTimeout(_sessionTimer);
+  if (!currentUser) return;
+  _sessionTimer = setTimeout(() => {
+    if (currentUser) { logoutUser(); toast('⏳ Сессия истекла — выполнен автовыход'); }
+  }, 30 * 60 * 1000);
+}
+['click','keydown','touchstart','mousemove'].forEach(ev =>
+  document.addEventListener(ev, _resetSessionTimer, { passive: true })
+);
 const ROLE_TABS = {
   admin: ['home', 'history', 'statistics', 'reports', 'plan', 'settings'],
   operator: ['home', 'history', 'reports', 'plan'],
-  viewer: ['home', 'history', 'statistics', 'plan']
+  manager: ['home', 'history', 'statistics', 'reports', 'plan'],
+  guest: ['home', 'history', 'statistics', 'plan']
 };
 const ROLE_PERMISSIONS = {
-  admin: ['shivukimWrite', 'shivukimDelete', 'dailyReportExport', 'analyticsExport', 'planWrite', 'settingsWrite', 'backupRestore', 'whatsapp'],
+  admin: ['shivukimWrite', 'shivukimDelete', 'dailyReportExport', 'analyticsExport', 'planWrite', 'shchitaWrite', 'settingsWrite', 'backupRestore', 'whatsapp'],
   operator: ['shivukimWrite', 'shivukimDelete', 'dailyReportExport', 'whatsapp'],
-  viewer: []
+  manager: ['dailyReportExport', 'analyticsExport', 'planWrite', 'whatsapp'],
+  guest: []
 };
+// Freeze security-critical constants against runtime prototype pollution / tampering
+Object.freeze(AUTH_USERS); AUTH_USERS.forEach(u => Object.freeze(u));
+Object.freeze(ROLE_PERMISSIONS); Object.freeze(ROLE_TABS);
 let currentUser = null;
+
+// Пользователи, созданные админом (грузятся из листа Users). Встроенные AUTH_USERS — резерв от лок-аута.
+let dynamicUsers = [];
+function allUsers() { return AUTH_USERS.concat(dynamicUsers); }
+function isAdmin() { return currentUser?.role === 'admin'; }
+
+// Метки для админ-UI
+const TAB_LABELS = { home:'בית', history:'היסטוריה', statistics:'סטטיסטיקה', reports:'דוחות', plan:'תכנון', settings:'הגדרות' };
+const ALL_PERMS = ['shivukimWrite','shivukimDelete','dailyReportExport','analyticsExport','planWrite','shchitaWrite','settingsWrite','backupRestore','whatsapp'];
+const PERM_LABELS = {
+  shivukimWrite:'עריכת שיווקים', shivukimDelete:'מחיקת שיווקים', dailyReportExport:'דוח יומי',
+  analyticsExport:'ייצוא אנליטיקה', planWrite:'עריכת תכנון', shchitaWrite:'עריכת שחיטה',
+  settingsWrite:'הגדרות', backupRestore:'גיבוי/שחזור', whatsapp:'וואטסאפ'
+};
+
+// Загрузить пользователей из листа Users
+async function fetchUsers() {
+  try {
+    const res = await fetch(cloudUrl('users'));
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      dynamicUsers = data.filter(u => u && u.username);
+      if (currentUser) {
+        const fresh = allUsers().find(u => u.username === currentUser.username);
+        if (fresh) { currentUser = userView(fresh); applyAccessControl(); render(); }
+      } else {
+        // восстановить сессию юзера, которого не было среди встроенных при загрузке
+        const restored = loadAuthUser();
+        if (restored) {
+          currentUser = restored;
+          hideLoginOverlay();
+          applyAccessControl();
+          switchTab(getAllowedTabs()[0] || 'home');
+          render();
+        }
+      }
+      if (typeof renderUsersAdmin === 'function') renderUsersAdmin();
+    }
+  } catch (e) { /* нет листа Users или связи — работаем на встроенных */ }
+}
+
+// ───────── Админ-UI: управление пользователями ─────────
+function renderUsersAdmin() {
+  const card = document.getElementById('usersAdminCard');
+  const body = document.getElementById('usersAdminBody');
+  if (!card || !body) return;
+  card.style.display = isAdmin() ? 'block' : 'none';
+  if (!isAdmin()) return;
+
+  const list = dynamicUsers.length
+    ? dynamicUsers.map(u => `
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; margin-bottom:6px;">
+        <div style="flex:1; min-width:0;">
+          <b>${escapeHtml(u.label || u.username)}</b>
+          <span style="font-size:11px; color:var(--text-secondary);"> (${escapeHtml(u.username)})</span>
+          <div style="font-size:10px; color:var(--text-secondary); white-space:normal;">${(u.tabs||[]).map(t=>TAB_LABELS[t]||t).join(', ')||'ללא טאבים'} · ${(u.perms||[]).length} הרשאות</div>
+        </div>
+        <button class="rec-btn" style="color:#D32F2F; padding:6px 10px; flex:0;" onclick="deleteUserAdmin('${escapeHtml(u.username)}')">🗑️</button>
+      </div>`).join('')
+    : '<div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">אין משתמשים מותאמים עדיין</div>';
+
+  const tabChecks = TAB_NAMES.map(t =>
+    `<label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; margin:2px 8px 2px 0;"><input type="checkbox" class="uNewTab" value="${t}"> ${TAB_LABELS[t]||t}</label>`).join('');
+  const permChecks = ALL_PERMS.map(p =>
+    `<label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; margin:2px 8px 2px 0;"><input type="checkbox" class="uNewPerm" value="${p}"> ${PERM_LABELS[p]||p}</label>`).join('');
+
+  body.innerHTML = `
+    ${list}
+    <div style="border-top:1px dashed var(--border); margin-top:10px; padding-top:12px;">
+      <div style="font-weight:700; font-size:13px; margin-bottom:8px;">➕ משתמש חדש (שם קיים = עדכון)</div>
+      <input id="uNewName" placeholder="שם משתמש (לכניסה)" class="rec-btn" style="width:100%; text-align:right; padding:10px; margin-bottom:6px;">
+      <input id="uNewLabel" placeholder="שם תצוגה" class="rec-btn" style="width:100%; text-align:right; padding:10px; margin-bottom:6px;">
+      <input id="uNewPass" type="password" placeholder="סיסמה" class="rec-btn" style="width:100%; text-align:right; padding:10px; margin-bottom:10px;">
+      <div style="font-size:12px; font-weight:700; margin-bottom:4px;">📑 טאבים מותרים</div>
+      <div style="margin-bottom:10px;">${tabChecks}</div>
+      <div style="font-size:12px; font-weight:700; margin-bottom:4px;">🔑 הרשאות</div>
+      <div style="margin-bottom:12px;">${permChecks}</div>
+      <button class="btn" onclick="addUserAdmin()">💾 שמור משתמש</button>
+    </div>`;
+}
+
+async function addUserAdmin() {
+  if (!isAdmin()) { toast('רק אדמין'); return; }
+  const username = (document.getElementById('uNewName').value || '').trim();
+  const label    = (document.getElementById('uNewLabel').value || '').trim();
+  const pass     = document.getElementById('uNewPass').value || '';
+  if (!username || !pass) { alert('נא למלא שם משתמש וסיסמה'); return; }
+  if (pass.length < 4) { alert('סיסמה חייבת להיות לפחות 4 תווים'); return; }
+  const tabs  = Array.from(document.querySelectorAll('.uNewTab:checked')).map(c => c.value);
+  const perms = Array.from(document.querySelectorAll('.uNewPerm:checked')).map(c => c.value);
+  const passwordHash = await _sha256(pass);
+  const user = { username, label: label || username, role: 'custom', tabs, perms, passwordHash };
+  try {
+    await cloudPost({ type: 'users', action: 'upsert', targetUser: user });
+    dynamicUsers = dynamicUsers.filter(u => u.username !== username).concat([user]);
+    renderUsersAdmin();
+    toast('✅ המשתמש נשמר');
+  } catch (e) { alert('שגיאה בשמירת משתמש: ' + e.message); }
+}
+
+async function deleteUserAdmin(username) {
+  if (!isAdmin()) { toast('רק אדמין'); return; }
+  if (!confirm('למחוק את המשתמש ' + username + '?')) return;
+  try {
+    await cloudPost({ type: 'users', action: 'delete', targetUser: { username } });
+    dynamicUsers = dynamicUsers.filter(u => u.username !== username);
+    renderUsersAdmin();
+    toast('🗑️ המשתמש נמחק');
+  } catch (e) { alert('שגיאה במחיקה: ' + e.message); }
+}
+
+function userView(u) {
+  const v = { username: u.username, role: u.role, label: u.label };
+  if (Array.isArray(u.tabs))  v.tabs  = u.tabs;
+  if (Array.isArray(u.perms)) v.perms = u.perms;
+  return v;
+}
 
 function loadAuthUser() {
   try {
-    const saved = JSON.parse(localStorage.getItem('poultry_auth_user') || 'null');
+    const saved = JSON.parse(sessionStorage.getItem('poultry_auth_user') || localStorage.getItem('poultry_auth_user') || 'null');
     if (!saved) return null;
-    const known = AUTH_USERS.find(user => user.username === saved.username && user.role === saved.role);
-    return known ? { username: known.username, role: known.role, label: known.label } : null;
+    const known = allUsers().find(user => user.username === saved.username);
+    return known ? userView(known) : null;
   } catch (e) {
     return null;
   }
 }
 
 function saveAuthUser(user) {
-  localStorage.setItem('poultry_auth_user', JSON.stringify({ username: user.username, role: user.role }));
+  sessionStorage.setItem('poultry_auth_user', JSON.stringify({ username: user.username, role: user.role }));
+  localStorage.removeItem('poultry_auth_user');
 }
 
 function getAllowedTabs() {
-  return ROLE_TABS[currentUser?.role] || [];
+  if (!currentUser) return [];
+  // персональный список вкладок важнее роли
+  if (Array.isArray(currentUser.tabs)) return currentUser.tabs;
+  return ROLE_TABS[currentUser.role] || [];
 }
 
 function canTab(tabName) {
@@ -612,23 +786,14 @@ function canTab(tabName) {
 
 function can(permission) {
   if (!currentUser) return false;
+  // персональный список прав важнее роли
+  if (Array.isArray(currentUser.perms)) return currentUser.perms.includes(permission);
   return (ROLE_PERMISSIONS[currentUser.role] || []).includes(permission);
-}
-
-function isAdminUser() {
-  return currentUser?.role === 'admin';
-}
-
-function canEditRecord(item) {
-  if (!can('shivukimWrite') || !item) return false;
-  if (isAdminUser()) return true;
-  const todayStr = getSafeIsoDate();
-  return item.parsedDate && getDateKey(item.parsedDate) === todayStr;
 }
 
 function requirePermission(permission) {
   if (can(permission)) return true;
-  toast('אין הרשאה לפעולה זו');
+  toast('Нет доступа для этой роли');
   return false;
 }
 
@@ -643,26 +808,55 @@ function hideLoginOverlay() {
   if (overlay) overlay.style.display = 'none';
 }
 
-function loginUser() {
+async function loginUser() {
+  const error = document.getElementById('loginError');
+  const now = Date.now();
+  // Brute-force lockout check
+  if (_loginState.lockedUntil > now) {
+    const secs = Math.ceil((_loginState.lockedUntil - now) / 1000);
+    if (error) error.textContent = `Слишком много попыток. Подождите ${secs} с.`;
+    return;
+  }
   const username = (document.getElementById('loginUser')?.value || '').trim();
   const password = document.getElementById('loginPass')?.value || '';
-  const found = AUTH_USERS.find(user => user.username === username && user.password === password);
-  const error = document.getElementById('loginError');
-  if (!found) {
+  // Sanitize inputs
+  if (!username || username.length > 64 || password.length > 128) {
     if (error) error.textContent = 'Неверный логин или пароль';
     return;
   }
-  currentUser = { username: found.username, role: found.role, label: found.label };
+  const hash = await _sha256(password);
+  const found = allUsers().find(u => u.username === username && u.passwordHash === hash);
+  if (!found) {
+    _loginState.fails++;
+    if (_loginState.fails >= 5) {
+      _loginState.lockedUntil = now + 60000; // 60 sec lockout
+      _loginState.fails = 0;
+      _saveLoginState(_loginState);
+      if (error) error.textContent = 'Слишком много попыток. Подождите 30 с.';
+    } else {
+      _saveLoginState(_loginState);
+      if (error) error.textContent = `Неверный логин или пароль (попытка ${_loginState.fails}/5)`;
+    }
+    return;
+  }
+  _loginState.fails = 0;
+  _loginState.lockedUntil = 0;
+  _saveLoginState(_loginState);
+  currentUser = userView(found);
   saveAuthUser(currentUser);
   if (error) error.textContent = '';
   hideLoginOverlay();
   applyAccessControl();
   switchTab(getAllowedTabs()[0] || 'home');
+  _resetSessionTimer();
   render();
+  updatePendingBadge();
+  flushSyncQueue();
 }
 
 function logoutUser() {
   if (!currentUser) return showLoginOverlay();
+  sessionStorage.removeItem('poultry_auth_user');
   localStorage.removeItem('poultry_auth_user');
   currentUser = null;
   applyAccessControl();
@@ -682,25 +876,17 @@ function applyAccessControl() {
     });
   };
   hideButtons(['openModal', 'copyYesterday', 'saveRecord', 'editRecord', 'deleteRecord'], can('shivukimWrite'));
-  hideButtons(['exportDailyExcel', 'exportDailyPDF', 'exportPDF'], can('dailyReportExport'));
+  hideButtons(['exportDailyExcel', 'exportDailyPDF'], can('dailyReportExport'));
   hideButtons(['exportExcel', 'exportPDF'], can('dailyReportExport') || can('analyticsExport'));
   hideButtons(['exportAnalyticsExcel', 'exportAnalyticsPDF', 'sendAnalyticsWhatsApp', 'exportPeriodExcel'], can('analyticsExport'));
-  hideButtons([
-    'exportPlanExcel',
-    'exportPlanVsActualExcel',
-    'openPlanModal',
-    'savePlanTarget',
-    'clearPlanTarget',
-    'saveDerishott',
-    'copyDerishotFromYesterday',
-    'openShchitaModal',
-    'saveShchitaData',
-    'copyShchitaFromYesterday'
-  ], can('planWrite'));
+  hideButtons(['exportPlanExcel', 'savePlanTarget', 'clearPlanTarget'], can('planWrite'));
+  hideButtons(['exportPlanVsActualExcel'], can('planWrite') || can('analyticsExport'));
+  hideButtons(['openShchitaModal', 'copyShchitaFromYesterday', 'saveShchitaData'], can('shchitaWrite'));
   hideButtons(['saveGsUrl', 'saveAutoSync', 'setPin', 'clearPin', 'backupData', 'restoreFile'], can('settingsWrite'));
   const badge = document.getElementById('userBadge');
   if (badge) badge.textContent = currentUser ? currentUser.label : 'Login';
   if (currentUser && !allowedTabs.includes(currentTab)) currentTab = allowedTabs[0] || 'home';
+  if (typeof renderUsersAdmin === 'function') renderUsersAdmin();
 }
 
 try {
@@ -711,15 +897,16 @@ try {
 try {
   const savedSettings = localStorage.getItem('poultry_manager_settings');
   if (savedSettings) settings = normalizeSettings(JSON.parse(savedSettings));
-} catch (e) { console.error(e); }
+} catch (e) {}
 settings = normalizeSettings(settings);
-try { localStorage.setItem('poultry_manager_settings', JSON.stringify(settings)); } catch (e) { console.error(e); }
+try { localStorage.setItem('poultry_manager_settings', JSON.stringify(settings)); } catch (e) {}
 
 function getSafeIsoDate() {
   try {
-    return israelDate(Date.now()); // Israel-TZ aware (fix)
+    const tzOffset = new Date().getTimezoneOffset() * 60000;
+    return new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
   } catch (e) {
-    return new Date().toISOString().slice(0, 10);
+    return '2026-01-01';
   }
 }
 
@@ -771,58 +958,8 @@ function truncateLabel(value, maxLen) {
 }
 
 function getDateKey(dateObj) {
-  try {
-    return israelDate(dateObj); // Israel-TZ aware (fix)
-  } catch(e) {
-    return new Date(dateObj).toISOString().slice(0, 10);
-  }
-}
-
-function parseIsoDateLocal(isoStr) {
-  const parts = String(isoStr || '').split('-').map(Number);
-  if (parts.length !== 3 || !parts[0]) return null;
-  return new Date(parts[0], parts[1] - 1, parts[2]);
-}
-
-function getEffectivePerformanceQty(shchitaQty, shivukimQty) {
-  const sh = Number(shchitaQty) || 0;
-  return sh;
-}
-
-function purgeBucketFromDayMap(dayMap, bucket) {
-  if (!dayMap || !bucket) return;
-  Object.keys(dayMap).forEach(key => {
-    if (getPlanBucketForSlaughterhouse(key) === bucket) delete dayMap[key];
-  });
-}
-
-function getDayPlanDisplayMap(dateKey) {
-  const plan = getPlan()[dateKey] || {};
-  const derishot = getDerishott()[dateKey] || {};
-  return normalizePlanMapForCalendar({ ...plan, ...derishot });
-}
-
-function getDayShivukimMap(dateKey) {
-  const map = {};
-  records.forEach(r => {
-    const d = getRecordDate(r);
-    if (!d || getDateKey(d) !== dateKey) return;
-    const bucket = getPlanBucketForSlaughterhouse(r.slaughterhouse);
-    map[bucket] = (map[bucket] || 0) + (Number(r.quantity) || 0);
-  });
-  return map;
-}
-
-function getDayShchitaMap(dateKey) {
-  return normalizePlanMapForCalendar(getShchita()[dateKey] || {});
-}
-
-function getPlanModalContext(dateKey, slaughter) {
-  const bucket = getPlanBucketForSlaughterhouse(slaughter);
-  const target = getDayPlanDisplayMap(dateKey)[bucket] || 0;
-  const shivukim = getDayShivukimMap(dateKey)[bucket] || 0;
-  const shchita = getDayShchitaMap(dateKey)[bucket] || 0;
-  return { bucket, target, shivukim, shchita };
+  const local = new Date(dateObj.getTime() - dateObj.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
 }
 
 function startOfDay(dateObj) {
@@ -868,448 +1005,13 @@ function getPeriodRange(period) {
 
 function getRecordDate(record) {
   if (!record || !record.datetime) return null;
-  const raw = String(record.datetime).trim();
-  if (!raw) return null;
-
-  // Try direct parse (ISO format, standard JS date strings)
-  let parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) return parsed;
-
-  // Try DD/MM/YYYY HH:mm or DD/MM/YYYY
-  const dmyMatch = raw.match(/^(\d{1,2})[\/\.](\d{1,2})[\/\.](\d{2,4})\s*(.*)$/);
-  if (dmyMatch) {
-    const day = dmyMatch[1], month = dmyMatch[2], year = dmyMatch[3].length === 2 ? '20' + dmyMatch[3] : dmyMatch[3];
-    const time = dmyMatch[4] || '00:00';
-    parsed = new Date(`${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}T${time.length > 2 ? time : time + ':00'}`);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-
-  // Try DD-MM-YYYY
-  const dmy2 = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})\s*(.*)$/);
-  if (dmy2) {
-    const day = dmy2[1], month = dmy2[2], year = dmy2[3].length === 2 ? '20' + dmy2[3] : dmy2[3];
-    const time = dmy2[4] || '00:00';
-    parsed = new Date(`${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}T${time.length > 2 ? time : time + ':00'}`);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-
-  // Try Google Sheets serial number (days since 1899-12-30)
-  const asNum = Number(raw);
-  if (!Number.isNaN(asNum) && asNum > 30000 && asNum < 60000) {
-    parsed = new Date((asNum - 25569) * 86400000);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-
-  // Try timestamp (seconds or milliseconds)
-  if (!Number.isNaN(asNum) && asNum > 1000000000) {
-    parsed = new Date(asNum > 1e12 ? asNum : asNum * 1000);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-
-  dwarn('getRecordDate: cannot parse datetime:', raw);
-  return null;
-}
-
-// ── Map Hebrew column names from Google Sheets to English field names ──
-const HEBREW_FIELD_MAP = {
-  'תאריך ושעה': 'datetime',
-  'תאריך': 'datetime',
-  'חווה': 'farm',
-  'כמות': 'quantity',
-  'משחטה': 'slaughterhouse',
-  'סוג': 'kashrut',
-  'כשרות': 'kashrut',
-  'הערות': 'notes',
-  'סטטוס': 'status',
-  'תוצר': 'notes',
-  'מזהה': 'id',
-  'שם': 'farm',
-  'שחיטה': 'slaughterhouse'
-};
-
-// ── Convert any cloud format to normalized nested {YYYY-MM-DD: {slaughter: qty}} ──
-// Handles 3 formats:
-// ── love.html calendar fix: Israel-timezone-aware date + row parsing ──
-// Converts any timestamp to YYYY-MM-DD in Asia/Jerusalem (handles DST correctly)
-function israelDate(t) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit"
-  }).format(new Date(t));
-}
-
-// Canonicalises slaughter names the same way love.html does
-function canonicalSlaughter(name) {
-  const s = String(name || "").trim();
-  if (!s) return "";
-  if (/^מעוף\s*2/.test(s)) return "מעוף 2";
-  if (s.startsWith("מעוף"))  return "מעוף";
-  if (s.includes("טרי"))     return "טרי וחלק";
-  if (s.includes("מישור"))   return "מישור";
-  if (s.includes("אשקלון")) return "אשקלון";
-  if (s.includes("עטרות"))   return "עטרות";
-  if (s.includes("כללי"))    return "כללי";
-  // Fallback: return original trimmed value so external slaughterhouses are preserved
-  return s;
-}
-
-// Scans ALL values in a raw sheet row (field-name agnostic).
-// Returns {date, slaughter, qty} or null.
-function extractRowIL(raw) {
-  let slaughter = ""; let qty = 0;
-  let isoDate = ""; // direct YYYY-MM-DD wins over any timestamp
-  const dates = [];
-  for (const v of Object.values(raw)) {
-    if (v == null || v === "") continue;
-    if (typeof v === "number") { if (v > qty) qty = v; continue; }
-    if (typeof v === "string") {
-      const s = v.trim(); if (!s) continue;
-      // Pure date column YYYY-MM-DD (no time part) — that's the record date
-      const isoMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-      if (isoMatch) {
-        if (!isoDate) isoDate = `${isoMatch[1]}-${String(isoMatch[2]).padStart(2,'0')}-${String(isoMatch[3]).padStart(2,'0')}`;
-        continue;
-      }
-      // Detect timestamps (ISO with time, GMT string, d.m.y with time)
-      if (/^\d{4}-\d{1,2}-\d{1,2}T/.test(s) || /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || /GMT|UTC|\dZ$/.test(s)) {
-        const t = Date.parse(s);
-        if (!isNaN(t)) {
-          const hms = new Intl.DateTimeFormat("en-GB", {
-            timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
-          }).format(new Date(t));
-          dates.push({ t, isMidnightIL: hms === "00:00:00" || hms === "24:00:00" });
-        }
-        continue;
-      }
-      const c = canonicalSlaughter(s);
-      if (c && !slaughter) slaughter = c;
-    }
-  }
-  let date = isoDate;
-  if (!date && dates.length) {
-    const mid = dates.filter(x => x.isMidnightIL);
-    const pick = mid.length ? mid.sort((a, b) => a.t - b.t)[0] : dates.sort((a, b) => a.t - b.t)[0];
-    date = israelDate(pick.t);
-  }
-  if (!date || !slaughter || !qty) return null;
-  return { date, slaughter, qty };
-}
-// ── end love.html calendar fix ──
-
-// ── Israel-timezone timestamp formatter ──
-// Returns "D.M.YYYY, H:MM:SS" (matches the "תוכנית"/"שחיטות" sheet column D format)
-function formatIsraelTimestamp(date) {
-  const d = date instanceof Date ? date : new Date(date || Date.now());
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Jerusalem',
-    day: 'numeric', month: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: false
-  }).formatToParts(d).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
-  let hour = parts.hour === '24' ? '0' : parts.hour;
-  return `${parts.day}.${parts.month}.${parts.year}, ${hour}:${parts.minute}:${parts.second}`;
-}
-
-// Build a flat rows array [[YYYY-MM-DD, slaughter, qty, timestamp], ...]
-// matching the sheet layout: A=date, B=slaughter, C=qty, D=timestamp.
-function buildSheetRows(dateKey, slaughterMap) {
-  const ts = formatIsraelTimestamp(new Date());
-  const rows = [];
-  Object.entries(slaughterMap || {}).forEach(([sl, qty]) => {
-    const q = Number(qty) || 0;
-    if (!sl) return;
-    rows.push([dateKey, sl, q, ts]);
-  });
-  return rows;
-}
-
-// ── love.html: exact API constants and getall mechanism ──
-const LOVE_API_TOKEN = 'Wo5gWfITVAyXx70ZOg5MIOyPWTaxM924OqoLHZCB';
-function urlWithToken(url) {
-  if (!url) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return url + sep + 'token=' + encodeURIComponent(LOVE_API_TOKEN);
-}
-
-// Fetches both tochnit and shchita in one call — the same way love.html does.
-// Uses TEST_SYNC_URL (same script as love.html). Returns {ok, tochnit:[], shchita:[]} or null.
-async function apiGetAllLove() {
-  const loveUrl = TEST_SYNC_URL;
-  if (!loveUrl) return null;
-  try {
-    const res = await fetch(`${loveUrl}?token=${encodeURIComponent(LOVE_API_TOKEN)}&action=getall`);
-    return res.json();
-  } catch(e) {
-    dwarn('apiGetAllLove error:', e);
-    return null;
-  }
-}
-
-// love.html aggregate() — but LAST-WRITE-WINS instead of summing duplicates,
-// so multiple sheet updates for the same date+slaughter do not inflate totals.
-function aggregateLove(rows) {
-  const out = {};
-  if (!rows || !Array.isArray(rows)) return out;
-  // Sort by updatedAt ascending so later writes overwrite earlier ones.
-  const sorted = [...rows].sort((a, b) => {
-    const ta = String((a && (a.updatedAt || a.updated_at)) || '');
-    const tb = String((b && (b.updatedAt || b.updated_at)) || '');
-    return ta.localeCompare(tb);
-  });
-  for (const r of sorted) {
-    const p = extractRowIL(r);
-    if (!p) continue;
-    if (!out[p.date]) out[p.date] = {};
-    out[p.date][p.slaughter] = p.qty; // overwrite, do not sum
-  }
-  return out;
-}
-
-// ── end love.html API mechanism ──
-
-
-//   1. Flat array [{date, slaughter, qty, updatedAt}]  (normal)
-//   2. Flat array with JSON blob in slaughter field     {"מעוף":52714,...}
-//   3. Nested object with JS Date string keys          {"Wed May 13 2026 00:00:00 GMT+0300": {...}}
-// Uses last-write-wins (by updatedAt) to handle duplicates correctly.
-function parseDateToYMD(rawDate) {
-  const s = String(rawDate || '').trim();
-  const asNum = Number(rawDate);
-  if (rawDate !== null && rawDate !== '' && Number.isFinite(asNum)) {
-    // Google Sheets serial date: days since 1899-12-30.
-    if (asNum > 20000 && asNum < 80000) {
-      const d = new Date((asNum - 25569) * 86400000);
-      if (!Number.isNaN(d.getTime())) return d.toISOString().substring(0, 10);
-    }
-  }
-  // Already YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
-  // Common Google Sheets display dates: 15.05.2026 / 15/05/2026 / 15.5.26
-  const dmy = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(?:\D|$)/);
-  if (dmy) {
-    const year = dmy[3].length === 2 ? '20' + dmy[3] : dmy[3];
-    return `${year}-${String(dmy[2]).padStart(2,'0')}-${String(dmy[1]).padStart(2,'0')}`;
-  }
-  // JS Date toString: "Wed May 13 2026 00:00:00 GMT+0300 (...)"
-  const m = s.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\s+(\d{4})/);
-  if (m) {
-    const months = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
-    return `${m[3]}-${months[m[1]]}-${String(m[2]).padStart(2,'0')}`;
-  }
-  // Fallback: try Date parse but use explicit offset to avoid timezone shift
-  try {
-    const d = new Date(s);
-    if (!isNaN(d)) {
-      // Extract from ISO string in UTC but compensate: if original has +0300, add 3h
-      const offsetMatch = s.match(/GMT([+-])(\d{2})(\d{2})/);
-      let ms = d.getTime();
-      if (offsetMatch) {
-        const sign = offsetMatch[1] === '+' ? 1 : -1;
-        ms += sign * (parseInt(offsetMatch[2], 10) * 60 + parseInt(offsetMatch[3], 10)) * 60000;
-      }
-      const nd = new Date(ms);
-      return nd.toISOString().substring(0, 10);
-    }
-  } catch(e) {}
-  return null;
-}
-
-function normalizeSheetNumber(value) {
-  if (value === null || value === undefined) return 0;
-  const clean = String(value).replace(/[,\s]/g, '').trim();
-  const n = Number(clean);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function normalizeSheetRow(row) {
-  if (!row) return null;
-
-  if (Array.isArray(row)) {
-    return {
-      date: row[0],
-      slaughter: row[1],
-      qty: row[2],
-      updatedAt: row[3]
-    };
-  }
-
-  if (typeof row !== 'object') return null;
-  const mapped = normalizeCloudRecord(row);
-  const normalized = {
-    date: mapped.date || mapped.datetime || mapped.Date || mapped.DATE,
-    slaughter: mapped.slaughter || mapped.slaughterhouse || mapped.Slaughter || mapped.SLAUGHTER,
-    qty: mapped.qty || mapped.quantity || mapped.Qty || mapped.QTY,
-    updatedAt: mapped.updatedAt || mapped.updated_at || mapped.UpdatedAt || mapped.UPDATED_AT
-  };
-
-  if (normalized.date && normalized.slaughter && normalized.qty !== undefined && normalized.qty !== '') {
-    return normalized;
-  }
-
-  // Headerless sheets often arrive as {"0":date,"1":slaughter,"2":qty}
-  // or as objects whose keys are the first data row. Values still keep sheet order.
-  const keys = Object.keys(row);
-  const hasOnlyIndexKeys = keys.every(key => /^\d+$/.test(key)) && keys.some(key => Number(key) < 10);
-  const orderedKeys = hasOnlyIndexKeys
-    ? keys.sort((a, b) => Number(a) - Number(b))
-    : keys;
-  const values = orderedKeys.map(key => row[key]);
-  if (values.length >= 3) {
-    const ymdValue = values.find(value => /^\d{4}-\d{2}-\d{2}/.test(String(value || '').trim()));
-    const parsedDateValue = ymdValue || values.find(value => parseDateToYMD(value));
-    const qtyValue = values.find(value => normalizeSheetNumber(value) > 0 && !parseDateToYMD(value));
-    const slaughterValue = values.find(value => {
-      const text = String(value || '').trim();
-      return text && !parseDateToYMD(text) && normalizeSheetNumber(text) === 0;
-    });
-    if (parsedDateValue && slaughterValue && qtyValue !== undefined) {
-      return {
-        date: parsedDateValue,
-        slaughter: slaughterValue,
-        qty: qtyValue,
-        updatedAt: values.find(value => value !== parsedDateValue && parseDateToYMD(value)) || values[3]
-      };
-    }
-    return {
-      date: values[0],
-      slaughter: values[1],
-      qty: values[2],
-      updatedAt: values[3]
-    };
-  }
-
-  return null;
-}
-
-function getCloudRowsOrMap(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== 'object') return [];
-  if (Array.isArray(payload.data)) return payload.data;
-  if (Array.isArray(payload.records)) return payload.records;
-  if (Array.isArray(payload.rows)) return payload.rows;
-  return payload;
-}
-
-function cloudArrayToNestedMap(arr) {
-  // Case 3: nested object with (possibly non-standard) date string keys
-  if (!Array.isArray(arr)) {
-    if (!arr || typeof arr !== 'object') return {};
-    const result = {};
-    Object.entries(arr).forEach(([rawDate, slaughterMap]) => {
-      const dateStr = parseDateToYMD(rawDate);
-      if (!dateStr) return;
-      if (!result[dateStr]) result[dateStr] = {};
-      if (slaughterMap && typeof slaughterMap === 'object') {
-        Object.entries(slaughterMap).forEach(([sl, qty]) => {
-          const q = Number(qty) || 0;
-          if (sl && q > 0) result[dateStr][sl] = (result[dateStr][sl] || 0) + q;
-        });
-      }
-    });
-    return result;
-  }
-  // ── love.html fix: use Israel-timezone-aware extractRowIL ──
-  const timestamps = {};
-  const result = {};
-  const sorted = [...arr].sort((a, b) => {
-    const ra = normalizeSheetRow(a) || {};
-    const rb = normalizeSheetRow(b) || {};
-    const ta = String(ra.updatedAt || '');
-    const tb = String(rb.updatedAt || '');
-    return ta.localeCompare(tb);
-  });
-  sorted.forEach(row => {
-    if (!row) return;
-
-    // Try love.html extractor first (Israel TZ, field-name agnostic)
-    const extracted = (typeof row === 'object' && !Array.isArray(row)) ? extractRowIL(row) : null;
-    if (extracted) {
-      const { date: dateStr, slaughter, qty } = extracted;
-      if (!result[dateStr]) result[dateStr] = {};
-      result[dateStr][slaughter] = qty; // last-write-wins (rows pre-sorted by updatedAt)
-
-      return;
-    }
-
-    // Fallback: original logic for JSON-blob rows and array rows
-    const mapped = normalizeSheetRow(row);
-    if (!mapped) return;
-    const rawDate = mapped.date || mapped.datetime || '';
-    if (!rawDate) return;
-    const dateStr = parseDateToYMD(rawDate);
-    if (!dateStr) return;
-    const rawSlaughter = mapped.slaughterhouse || mapped.slaughter || '';
-    const updatedAt = String(mapped.updatedAt || mapped.updated_at || '');
-    // Case 1: slaughter field contains a JSON blob
-    if (rawSlaughter && String(rawSlaughter).trim().startsWith('{')) {
-      try {
-        const parsed = JSON.parse(String(rawSlaughter).trim());
-        if (!result[dateStr]) result[dateStr] = {};
-        Object.entries(parsed).forEach(([sl, qty]) => {
-          const q = normalizeSheetNumber(qty);
-          if (!sl || q <= 0) return;
-          const dedupKey = dateStr + '|' + sl;
-          if (!timestamps[dedupKey] || updatedAt >= timestamps[dedupKey]) {
-            timestamps[dedupKey] = updatedAt;
-            result[dateStr][sl] = q;
-          }
-        });
-      } catch(e) { /* skip malformed JSON rows */ }
-      return;
-    }
-    // Case 2: normal row with individual slaughter + qty
-    const slaughter = String(rawSlaughter).trim();
-    const qty = normalizeSheetNumber(mapped.qty || mapped.quantity || 0);
-    if (!slaughter || qty <= 0) return;
-    if (!result[dateStr]) result[dateStr] = {};
-    const dedupKey = dateStr + '|' + slaughter;
-    if (!timestamps[dedupKey] || updatedAt >= timestamps[dedupKey]) {
-      timestamps[dedupKey] = updatedAt;
-      result[dateStr][slaughter] = qty;
-    }
-  });
-  return result;
-}
-
-// ── Convert shivukim records array to shchita nested map ──
-// Aggregates quantities by date + slaughterhouse so they appear in the calendar
-function shivukimToShchitaMap(shivukimRecords) {
-  if (!Array.isArray(shivukimRecords)) return {};
-  const result = {};
-  shivukimRecords.forEach(row => {
-    if (!row) return;
-    const mapped = normalizeCloudRecord(row);
-    const dt = getRecordDate(mapped);
-    if (!dt) return;
-    const dateStr = getDateKey(dt);
-    const slaughter = String(mapped.slaughterhouse || '').trim();
-    const qty = Number(mapped.quantity) || 0;
-    if (!dateStr || !slaughter || qty <= 0) return;
-    const bucket = getPlanBucketForSlaughterhouse(slaughter);
-    if (!result[dateStr]) result[dateStr] = {};
-    result[dateStr][bucket] = (result[dateStr][bucket] || 0) + qty;
-  });
-  dlog('shivukimToShchitaMap: converted', shivukimRecords.length, 'records into', Object.keys(result).length, 'dates');
-  return result;
-}
-
-function normalizeCloudRecord(record) {
-  if (!record) return {};
-  const mapped = {};
-  // First: if record already has English keys, keep them
-  // Second: map Hebrew keys to English
-  for (const [key, value] of Object.entries(record)) {
-    const normalizedKey = key.trim();
-    if (HEBREW_FIELD_MAP[normalizedKey]) {
-      mapped[HEBREW_FIELD_MAP[normalizedKey]] = value;
-    } else {
-      // Keep original key (covers English keys like 'id', 'datetime', 'farm', etc.)
-      mapped[normalizedKey] = value;
-    }
-  }
-  return mapped;
+  const raw = String(record.datetime);
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function normalizeRecord(record) {
-  const safeRecord = normalizeCloudRecord(record) || {};
+  const safeRecord = record || {};
   return {
     id: safeRecord.id || Date.now().toString(36),
     datetime: safeRecord.datetime || '',
@@ -1556,17 +1258,7 @@ function render() {
     const todayStr = getSafeIsoDate();
     const filteredRecords = getFilteredSearchRecords();
     const normalizedRecords = filteredRecords.map(normalizeRecord).filter(item => item.parsedDate);
-    const badDateCount = filteredRecords.length - normalizedRecords.length;
-
-    // Show warning if records have unparseable dates
-    if (badDateCount > 0 && filteredRecords.length > 0) {
-      dwarn(`render: ${badDateCount}/${filteredRecords.length} records have invalid datetime`);
-      // Show first bad record sample for debugging
-      const badSample = filteredRecords.map(normalizeRecord).find(item => !item.parsedDate);
-      if (badSample) dwarn('Sample bad record datetime:', badSample.datetime);
-    }
-
-    const todayList = normalizedRecords.filter(item => getDateKey(item.parsedDate) === todayStr);
+    const todayList = normalizedRecords.filter(item => getDateKey(item.parsedDate) === todayStr).sort((a, b) => b.parsedDate - a.parsedDate);
     const historyList = normalizedRecords.filter(item => getDateKey(item.parsedDate) !== todayStr);
     const homeAnalytics = getAnalyticsData('day', 'slaughterhouse', filteredRecords);
     const tags = homeAnalytics.chartData.map(item => `<div class="stat-tag">🏭 ${escapeHtml(item.name)}: ${formatNumber(item.quantity)}</div>`).join('');
@@ -1593,14 +1285,17 @@ function render() {
         ${item.notes ? `<div style="font-size:11px; color:var(--text-secondary); margin-top:6px;">📝 ${escapeHtml(item.notes)}</div>` : ''}
         ${isEditable
           ? `<div style="display:flex; gap:10px; margin-top:10px;"><button class="rec-btn" onclick="editRecord('${item.id}')">✏️ ערוך</button><button class="rec-btn" style="color:red" onclick="deleteRecord('${item.id}')">🗑️ מחק</button></div>`
-          : `<div style="margin-top:12px; padding-top:10px; border-top:1px dashed #eee; font-size:11px; color:#999; font-weight:bold; text-align:center;">🔒 רשומה נעולה (רק היום ניתן לעריכה)</div>`
+          : `<div style="margin-top:12px; padding-top:10px; border-top:1px dashed #eee; font-size:11px; color:#999; font-weight:bold; text-align:center;">🔒 רשומה נעולה (היסטוריה)</div>`
         }
       </div>
     `;
 
-    const historyFiltered = historyList.filter(item => !activeKashrutFilter || item.kashrut === activeKashrutFilter);
-    document.getElementById('recordsList').innerHTML = todayList.map(item => mapRec(item, canEditRecord(item))).join('') || '<p style="text-align:center; padding:20px; color:gray;">אין שיווקים להיום</p>';
-    document.getElementById('historyList').innerHTML = historyFiltered.map(item => mapRec(item, canEditRecord(item))).join('') || '<p style="text-align:center; padding:20px; color:gray;">אין נתונים לסינון זה</p>';
+    const historyFiltered = historyList
+      .filter(item => !activeKashrutFilter || item.kashrut === activeKashrutFilter)
+      .sort((a, b) => b.parsedDate - a.parsedDate);
+    const canEditShivukim = can('shivukimWrite');
+    document.getElementById('recordsList').innerHTML = todayList.map(item => mapRec(item, canEditShivukim)).join('') || '<p style="text-align:center; padding:20px; color:gray;">אין שיווקים להיום</p>';
+    document.getElementById('historyList').innerHTML = historyFiltered.map(item => mapRec(item, canEditShivukim)).join('') || '<p style="text-align:center; padding:20px; color:gray;">אין נתונים לסינון זה</p>';
     renderStatisticsView();
     renderReportsView();
     if (document.getElementById('derishotGrid')) renderDerishotGrid();
@@ -1613,112 +1308,95 @@ async function pullFromCloud() {
   try {
     toast('⏳ מוריד נתונים מהענן...');
     const url = getGsUrl();
-    if (!url) {
-      return alert(isTestCloudMode()
-        ? 'חסר קישור Web App לגיליון בדיקות.\n\n1. פרסם Apps Script מהטבלה לבדיקות\n2. הדבק את הקישור ב־TEST_SYNC_URL בקובץ HTML או בהגדרות'
-        : 'חסר קישור לסנכרון');
-    }
+    if (!url) return alert('חסר קישור לסנכרון');
 
     // Pull שיווקים — try with type param first, fallback to plain URL
     let cloudData = null;
     try {
-      const data1 = await fetchCloudJson(url + '?type=shivukim');
+      const data1 = await fetchCloudJson(cloudUrl('shivukim'));
       if (Array.isArray(data1)) cloudData = data1;
-    } catch(e1) {}
+    } catch(e1) { throw e1; }
 
+    // Fallback: plain URL (old script format)
     if (!cloudData) {
       try {
-        const data2 = await fetchCloudJson(url);
+        const data2 = await fetchCloudJson(cloudUrl());
         if (Array.isArray(data2)) cloudData = data2;
-      } catch(e2) {}
+      } catch(e2) { throw e2; }
     }
 
     if (cloudData && Array.isArray(cloudData)) {
-      // Apply Hebrew→English field mapping
-      cloudData = cloudData.map(normalizeCloudRecord);
       const cloudIds = new Set(cloudData.map(r => r.id));
       const localPending = records.filter(r => r.status === 'pending' && !cloudIds.has(r.id));
       records = [...cloudData, ...localPending];
       localStorage.setItem('poultry_manager_data', JSON.stringify(records));
-
-      // שיווק הם שיווק בלבד — תכנון ושחיטה נטענים רק מהגיליונות הייעודיים שלהם
-      dlog('pullFromCloud: shivukim loaded:', cloudData.length, 'records (no auto-fill to plan/shchita)');
-
       render();
       toast(`✅ סונכרן — ${cloudData.length} רשומות`);
     } else {
-      alert('לא התקבלו נתונים מהענן.\n\n1. פתחו את הקישור בהגדרות בטאב חדש — צריך לראות טקסט JSON (מתחיל ב־[ או {).\n2. אם מופיע "דף לא נמצא" — העתיקו שוב את הקישור מ־Apps Script → ניהול פריסות.\n3. בפריסה: גישה = כולם (Anyone).');
-      toast('❌ לא התקבלו נתונים מהענן');
+      toast('❌ לא התקבלו נתונים מהענן — בדוק את הקישור בהגדרות');
       return;
     }
 
     // Pull דרישות (only if new script installed)
     try {
-      const cloudDerishott = await fetchCloudJson(url + '?type=derishott');
-      if (cloudDerishott && !cloudDerishott.error && Object.keys(cloudDerishott).length > 0) {
-        const nested = cloudArrayToNestedMap(cloudDerishott);
-        if (typeof nested === 'object' && Object.keys(nested).length > 0) {
-          const merged = { ...getDerishott(), ...nested };
-          saveDerishotStorage(merged);
-        }
+      const resD = await fetch(cloudUrl('derishott'));
+      const cloudDerishott = await resD.json();
+      if (cloudDerishott && typeof cloudDerishott === 'object' && !Array.isArray(cloudDerishott) && !cloudDerishott.error) {
+        const lo = getDerishott();
+        Object.entries(cloudDerishott).forEach(([dt, sl]) => {
+          if (!lo[dt]) lo[dt] = {};
+          Object.assign(lo[dt], sl);
+        });
+        saveDerishotStorage(lo);
       }
     } catch(e3) {}
 
-    // Pull תוכנית + שחיטה — love.html approach first (action=getall), then type= fallback
+    // Pull תוכנית (only if new script installed)
     try {
-      const loveData = await apiGetAllLove();
-      dlog('pullFromCloud apiGetAllLove:', loveData ? (loveData.ok ? 'ok' : 'err:'+loveData.error) : 'null');
-      if (loveData && loveData.ok) {
-        // tochnit from getall
-        if (Array.isArray(loveData.tochnit) && loveData.tochnit.length > 0) {
-          const nested = aggregateLove(loveData.tochnit);
-          if (Object.keys(nested).length > 0) {
-            const local = getPlan();
-            Object.entries(nested).forEach(([dt,sl])=>{ if(!local[dt]) local[dt]={}; Object.assign(local[dt],sl); });
-            savePlan(local);
-            dlog('pullFromCloud getall tochnit:', Object.keys(nested).length, 'dates');
-          }
-        }
-        // shchita from getall
-        if (Array.isArray(loveData.shchita) && loveData.shchita.length > 0) {
-          const nested = aggregateLove(loveData.shchita);
-          if (Object.keys(nested).length > 0) {
-            const localShc = getShchita();
-            Object.entries(nested).forEach(([dt,sl])=>{ if(!localShc[dt]) localShc[dt]={}; Object.assign(localShc[dt],sl); });
-            saveShchitaStorage(localShc);
-            dlog('pullFromCloud getall shchita:', Object.keys(nested).length, 'dates');
-          }
-        }
-      } else {
-        // Fallback: type= endpoints
-        dlog('pullFromCloud: falling back to type= endpoints');
-        const cloudTochnit = await fetchCloudJson(url + '?type=tochnit');
-        dlog('pullFromCloud tochnit raw:', JSON.stringify(cloudTochnit).substring(0, 200));
-        if (cloudTochnit && !cloudTochnit.error) {
-          const nested = cloudArrayToNestedMap(getCloudRowsOrMap(cloudTochnit));
-          if (typeof nested === 'object' && Object.keys(nested).length > 0) {
-            const local = getPlan();
-            Object.entries(nested).forEach(([dt,sl])=>{ if(!local[dt]) local[dt]={}; Object.assign(local[dt],sl); });
-            savePlan(local);
-          }
-        }
-        const cloudShchita = await fetchCloudJson(url + '?type=shchita');
-        dlog('pullFromCloud shchita raw:', JSON.stringify(cloudShchita).substring(0, 200));
-        if (cloudShchita && !cloudShchita.error) {
-          const nested = cloudArrayToNestedMap(getCloudRowsOrMap(cloudShchita));
-          if (typeof nested === 'object' && Object.keys(nested).length > 0) {
-            const localShc = getShchita();
-            Object.entries(nested).forEach(([dt,sl])=>{ if(!localShc[dt]) localShc[dt]={}; Object.assign(localShc[dt],sl); });
-            saveShchitaStorage(localShc);
-          }
-        }
+      const resT = await fetch(cloudUrl('tochnit'));
+      const cloudTochnit = await resT.json();
+      if (cloudTochnit && typeof cloudTochnit === 'object' && !Array.isArray(cloudTochnit) && !cloudTochnit.error) {
+        const local = getPlan();
+        Object.entries(cloudTochnit).forEach(([date, slaughters]) => {
+          if (!local[date]) local[date] = {};
+          Object.assign(local[date], slaughters);
+        });
+        savePlan(local);
       }
-    } catch(e4) { dwarn('pullFromCloud tochnit/shchita error:', e4); }
+    } catch(e4) {}
 
-    // Render everything after all data is loaded
+    // Pull חגים by date + slaughterhouse
+    try {
+      const resH = await fetch(cloudUrl('holidays'));
+      const cloudHolidays = await resH.json();
+      if (cloudHolidays && typeof cloudHolidays === 'object' && !Array.isArray(cloudHolidays) && !cloudHolidays.error) {
+        const localHolidays = getHolidays();
+        Object.entries(cloudHolidays).forEach(([key, holiday]) => {
+          if (key.includes('|') && holiday?.isHoliday) localHolidays[key] = holiday;
+        });
+        saveHolidays(localHolidays);
+      }
+    } catch(e_holidays) {}
+
     if (document.getElementById('derishotGrid')) renderDerishotGrid();
     if (document.getElementById('planDailyGrid')) renderPlanView();
-    if (document.getElementById('shchitaGrid')) renderShchitaGrid();
+
+    // Pull שחיטה בפועל
+    try {
+      const resShc = await fetch(cloudUrl('shchita'));
+      const cloudShchita = await resShc.json();
+      if (cloudShchita && typeof cloudShchita === 'object' && !Array.isArray(cloudShchita) && !cloudShchita.error) {
+        const localShc = getShchita();
+        Object.entries(cloudShchita).forEach(([date, slaughters]) => {
+          if (!localShc[date]) localShc[date] = {};
+          Object.assign(localShc[date], slaughters);
+        });
+        saveShchitaStorage(localShc);
+        if (document.getElementById('shchitaGrid')) renderShchitaGrid();
+        if (document.getElementById('planDailyGrid')) renderPlanView();
+        if (document.getElementById('derishotGrid')) renderDerishotGrid();
+      }
+    } catch(e_shc) {}
 
   } catch (e) {
     alert('שגיאה במשיכת נתונים מהענן:\n' + e.message);
@@ -1726,17 +1404,13 @@ async function pullFromCloud() {
 }
 
 async function sync(record, action) {
-  const url = getGsUrl();
-  if (!url) return false;
+  const payload = { ...record, type: 'shivukim', action: action || 'upsert' };
   try {
-    await fetch(url, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: JSON.stringify({ ...record, type: 'shivukim', action: action || 'upsert' })
-    });
+    await cloudPost(payload);   // читаем реальный ответ сервера
     return true;
   } catch(e) {
-    dwarn('Sync failed:', e);
+    console.warn('Sync failed, queued:', e);
+    enqueueSync(payload);       // не потеряем — отправим позже
     return false;
   }
 }
@@ -1755,17 +1429,30 @@ async function saveRecord() {
       alert('נא לבחור משחטה או להזין משחטה ידנית');
       return;
     }
-    rememberFarm(farm);
-    rememberSlaughterhouse(slaughterhouse);
+    // Input validation + sanitization
+    const _clean = v => String(v||'').trim().replace(/[<>"'`]/g,'').slice(0,200);
+    const qtyNum = Number(qty);
+    if (!Number.isFinite(qtyNum) || qtyNum <= 0 || qtyNum > 500000) {
+      alert('כמות לא תקינה (1 – 500,000)');
+      return;
+    }
+    const farmClean = _clean(farm);
+    const slClean   = _clean(slaughterhouse);
+    const notesRaw  = document.getElementById('fNotes').value || '';
+    const notesClean = _clean(notesRaw).slice(0, 500);
+    if (!farmClean || !slClean) { alert('נתון לא תקין'); return; }
+
+    rememberFarm(farmClean);
+    rememberSlaughterhouse(slClean);
 
     const data = {
-      id: editingId || (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8)),
+      id: editingId || Date.now().toString(36),
       datetime: document.getElementById('fDate').value || new Date().toISOString(),
-      farm: farm,
-      quantity: Number(qty),
-      slaughterhouse: slaughterhouse,
-      kashrut: document.getElementById('fKashrut').value || 'רגיל',
-      notes: document.getElementById('fNotes').value || '',
+      farm: farmClean,
+      quantity: Math.round(qtyNum),
+      slaughterhouse: slClean,
+      kashrut: _clean(document.getElementById('fKashrut').value || 'רגיל').slice(0,50),
+      notes: notesClean,
       status: 'pending'
     };
 
@@ -1788,8 +1475,6 @@ async function saveRecord() {
       localStorage.setItem('poultry_manager_data', JSON.stringify(records));
       render();
       toast('✅ סונכרן בהצלחה');
-    } else {
-      toast('⚠️ נשמר מקומית, סנכרון נכשל');
     }
   } catch (e) {
     alert('שגיאה בשמירת הנתונים: ' + e.message);
@@ -1801,16 +1486,14 @@ async function deleteRecord(id) {
   try {
     if (!confirm('למחוק מהטבלה ומכאן?')) return;
     const found = records.find(item => item.id === id);
-    if (!found) return;
-    toast('🗑️ מוחק מהענן...');
-    const ok = await sync(found, 'delete');
-    if (!ok) {
-      if (!confirm('מחיקה מהענן נכשלה. למחוק רק מקומית?')) return;
-    }
     records = records.filter(item => item.id !== id);
     localStorage.setItem('poultry_manager_data', JSON.stringify(records));
     render();
-    toast(ok ? '✅ נמחק בהצלחה' : '⚠️ נמחק מקומית בלבד');
+    if (found) {
+      toast('🗑️ מוחק מהענן...');
+      const ok = await sync(found, 'delete');
+      toast(ok ? '✅ נמחק בהצלחה' : '⚠️ נמחק מקומית, לא הצליח במחיקה מהענן');
+    }
   } catch (e) {
     alert('שגיאה במחיקה: ' + e.message);
   }
@@ -1834,7 +1517,7 @@ function openModal() {
     document.getElementById('fNotes').value = '';
     document.getElementById('modal').style.display = 'flex';
     renderTemplateChips();
-  } catch (e) { console.error(e); }
+  } catch (e) {}
 }
 
 function closeModal() {
@@ -1848,17 +1531,11 @@ function editRecord(id) {
     if (!found) return;
     editingId = found.id;
     document.getElementById('formTitle').innerText = 'עריכת שיווק';
-    // Правильный парсинг даты для <input type="datetime-local">
-    let dt = '';
-    const parsedDt = getRecordDate(found);
-    if (parsedDt) {
-      const local = new Date(parsedDt.getTime() - parsedDt.getTimezoneOffset() * 60000);
-      dt = local.toISOString().slice(0, 16);
-    }
+    const dt = found.datetime ? found.datetime.slice(0, 16) : '';
     document.getElementById('fDate').value = dt;
     document.getElementById('fFarm').value = found.farm || '';
     hideFarmSuggestions();
-    document.getElementById('fQty').value = found.quantity != null ? found.quantity : '';
+    document.getElementById('fQty').value = found.quantity;
     const slaughterVal = found.slaughterhouse || '';
     populateSlaughterSelect(slaughterVal);
     const knownSlaughters = [...getAllSlaughterhouses(), ''];
@@ -1872,10 +1549,10 @@ function editRecord(id) {
       document.getElementById('fSlaughter').style.display = 'block';
       document.getElementById('fSlaughter').value = slaughterVal;
     }
-    document.getElementById('fKashrut').value = found.kashrut || '';
-    document.getElementById('fNotes').value = found.notes || '';
+    document.getElementById('fKashrut').value = found.kashrut;
+    document.getElementById('fNotes').value = found.notes;
     document.getElementById('modal').style.display = 'flex';
-  } catch (e) { console.error(e); }
+  } catch (e) {}
 }
 
 function setStatisticsPeriod(period) {
@@ -1893,7 +1570,7 @@ function setStatisticsGroup(groupBy) {
 function switchTab(tabName) {
   try {
     if (currentUser && !canTab(tabName)) {
-      toast('אין גישה ללשונית זו');
+      toast('Нет доступа к этой вкладке');
       tabName = getAllowedTabs()[0] || 'home';
     }
     currentTab = tabName;
@@ -1905,10 +1582,8 @@ function switchTab(tabName) {
     });
     const searchBar = document.getElementById('searchBar');
     if (searchBar) searchBar.style.display = (tabName === 'home' || tabName === 'history') ? 'block' : 'none';
-    const shchitaFab = document.getElementById('shchitaFab');
-    if (shchitaFab) shchitaFab.style.display = (tabName === 'plan' && can('planWrite')) ? 'flex' : 'none';
     if (tabName === 'plan') { renderPlanView(); renderDerishotGrid(); }
-  } catch (e) { console.error(e); }
+  } catch (e) {}
 }
 
 function getExportFilename(extension) {
@@ -1924,7 +1599,7 @@ function downloadBlob(blob, filename) {
   setTimeout(() => {
     URL.revokeObjectURL(link.href);
     document.body.removeChild(link);
-  }, 100);
+  }, 0);
 }
 
 async function svgToPngDataUrl(svgText) {
@@ -2014,7 +1689,7 @@ async function exportPlanExcel() {
     toast('⏳ מכין דוח תכנון חודשי...');
 
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(`תכנון ${monthName}`, { views: [{ rightToLeft: true, state: 'frozen', xSplit: 1, ySplit: 3 }] });
+    const ws = wb.addWorksheet(`תכנון ${monthName}`, { views: [{ rightToLeft: true, state: 'frozen', xSplit: 1, ySplit: 4 }] });
 
     // 1. כותרת ראשית
     ws.mergeCells(1, 1, 1, daysInMonth + 2);
@@ -2025,6 +1700,14 @@ async function exportPlanExcel() {
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(1).height = 30;
 
+    ws.mergeCells(2, 1, 2, daysInMonth + 2);
+    const noteCell = ws.getCell(2, 1);
+    noteCell.value = '🎌 תאים אדומים = חג (מכונה לא עובדת, לא נספר ביעד)';
+    noteCell.font = { italic: true, size: 10, color: { argb: 'FFBF360C' } };
+    noteCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3E0' } };
+    noteCell.alignment = { horizontal: 'center' };
+    ws.getRow(2).height = 16;
+
     // 2. שורות כותרת (ימים ותאריכים)
     const DAYS_HE = ['א','ב','ג','ד','ה','ו','ש'];
     const headerRowDays = ['משחטה'];
@@ -2032,8 +1715,10 @@ async function exportPlanExcel() {
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month, d);
+      const dk = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dayHasHoliday = slaughterhouses.some(s => isHolidayDate(dk, s));
       headerRowDates.push(d); // תאריך
-      headerRowDays.push(DAYS_HE[dateObj.getDay()] + "'"); // יום בשבוע
+      headerRowDays.push(DAYS_HE[dateObj.getDay()] + "'" + (dayHasHoliday ? ' 🎌' : '')); // יום בשבוע
     }
     headerRowDates.push('סה"כ');
     headerRowDays.push('');
@@ -2061,11 +1746,16 @@ async function exportPlanExcel() {
       for (let d = 1; d <= daysInMonth; d++) {
         const dk = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const dayPlan = normalizePlanMapForCalendar(plan[dk] || {});
-        const val = dayPlan[s] || 0;
-        
-        rowData.push(val > 0 ? val : '');
-        slTotal += val;
-        monthTotalsByDay[d-1] += val;
+
+        if (isHolidayDate(dk, s)) {
+          const hName = getHolidayName(dk, s) || 'חג';
+          rowData.push(`🎌 ${hName}`);
+        } else {
+          const val = dayPlan[s] || 0;
+          rowData.push(val > 0 ? val : '');
+          slTotal += val;
+          monthTotalsByDay[d-1] += val;
+        }
       }
       
       rowData.push(slTotal > 0 ? slTotal : '');
@@ -2077,6 +1767,15 @@ async function exportPlanExcel() {
         cell.border = { top: {style:'thin', color:{argb:'FFCFD8DC'}}, left: {style:'thin', color:{argb:'FFCFD8DC'}}, bottom: {style:'thin', color:{argb:'FFCFD8DC'}}, right: {style:'thin', color:{argb:'FFCFD8DC'}} };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
         if (typeof cell.value === 'number') cell.numFmt = '#,##0';
+
+        // תא חג — רקע אדום וטקסט
+        if (col >= 2 && col <= daysInMonth + 1) {
+          const dk = `${year}-${String(month+1).padStart(2,'0')}-${String(col-1).padStart(2,'0')}`;
+          if (isHolidayDate(dk, s)) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCBC' } };
+            cell.font = { bold: true, color: { argb: 'FFBF360C' }, size: 9 };
+          }
+        }
         
         // צביעת עמודת השם ועמודת הסה"כ
         if (col === 1 || col === daysInMonth + 2) {
@@ -2546,27 +2245,14 @@ async function exportDailyExcel() {
     if (url) {
       try {
         let cloudData = null;
-        try { const d = await fetchCloudJson(url + '?type=shivukim'); if (Array.isArray(d)) cloudData = d; } catch(e1) {}
-        if (!cloudData) { try { const d = await fetchCloudJson(url); if (Array.isArray(d)) cloudData = d; } catch(e2) {} }
+        try { const r = await fetch(cloudUrl('shivukim')); const d = await r.json(); if (Array.isArray(d)) cloudData = d; } catch(e1) {}
+        if (!cloudData) { try { const r = await fetch(cloudUrl()); const d = await r.json(); if (Array.isArray(d)) cloudData = d; } catch(e2) {} }
         if (cloudData && Array.isArray(cloudData)) {
-          cloudData = cloudData.map(normalizeCloudRecord);
           const cloudIds = new Set(cloudData.map(r => r.id));
           const localPending = records.filter(r => r.status === 'pending' && !cloudIds.has(r.id));
           records = [...cloudData, ...localPending];
           localStorage.setItem('poultry_manager_data', JSON.stringify(records));
           render();
-        }
-        // Also refresh tochnit+shchita via love.html mechanism
-        const lv = await apiGetAllLove();
-        if (lv && lv.ok) {
-          if (Array.isArray(lv.tochnit) && lv.tochnit.length) {
-            const n=aggregateLove(lv.tochnit); const lo=getPlan();
-            Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); savePlan(lo);
-          }
-          if (Array.isArray(lv.shchita) && lv.shchita.length) {
-            const n=aggregateLove(lv.shchita); const lo=getShchita();
-            Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); saveShchitaStorage(lo);
-          }
         }
       } catch(e) { /* ממשיכים עם הנתונים המקומיים */ }
     }
@@ -2976,22 +2662,7 @@ function copyYesterday() {
 }
 
 function toggleDarkMode() { settings.dark = !settings.dark; document.body.classList.toggle('dark', settings.dark); saveS(); render(); }
-function saveGsUrl() {
-  if (!requirePermission('settingsWrite')) return;
-  const input = document.getElementById('gsUrl');
-  const val = input ? String(input.value || '').trim() : '';
-  if (CLOUD_SOURCE === 'production') {
-    settings.gsUrl = PRODUCTION_SYNC_URL;
-    if (input) input.value = PRODUCTION_SYNC_URL;
-    toast('☁️ מקור ייצור — כתובת קבועה');
-  } else {
-    if (!val) { toast('⚠️ הדבק קישור Web App מהגיליון לבדיקות'); return; }
-    settings.gsUrl = val;
-    toast('🧪 נשמר קישור לגיליון בדיקות');
-  }
-  saveS();
-  renderCloudSourceBanner();
-}
+function saveGsUrl() { settings.gsUrl = MASTER_URL; saveS(); }
 function saveS() {
   settings = normalizeSettings(settings);
   localStorage.setItem('poultry_manager_settings', JSON.stringify(settings));
@@ -3013,6 +2684,27 @@ function restoreData(event) {
 // PIN PROTECTION
 // ===============================================
 let pinBuffer = '';
+let pinFails = 0;
+let pinLockedUntil = 0;
+
+function isHashedPin(value) {
+  return typeof value === 'string' && value.startsWith('sha256$');
+}
+
+async function hashPin(pin) {
+  return 'sha256$' + await _sha256('poultry-pin-v2:' + pin);
+}
+
+async function verifyPin(pin) {
+  if (!settings.pin) return true;
+  if (isHashedPin(settings.pin)) return settings.pin === await hashPin(pin);
+  const ok = pin === settings.pin;
+  if (ok) {
+    settings.pin = await hashPin(pin);
+    saveS();
+  }
+  return ok;
+}
 
 function showPinOverlay() {
   const overlay = document.getElementById('pinOverlay');
@@ -3030,16 +2722,28 @@ function hidePinOverlay() {
 }
 
 function pinPress(digit) {
+  const now = Date.now();
+  if (pinLockedUntil > now) {
+    const err = document.getElementById('pinError');
+    if (err) { err.style.display = 'block'; setTimeout(() => { err.style.display = 'none'; }, 2000); }
+    return;
+  }
   if (pinBuffer.length >= 4) return;
   pinBuffer += digit;
   updatePinDots();
   if (pinBuffer.length === 4) {
-    setTimeout(() => {
-      if (pinBuffer === (settings.pin || '')) {
+    setTimeout(async () => {
+      if (await verifyPin(pinBuffer)) {
         hidePinOverlay();
         pinBuffer = '';
+        pinFails = 0;
       } else {
         pinBuffer = '';
+        pinFails++;
+        if (pinFails >= 5) {
+          pinLockedUntil = Date.now() + 60000;
+          pinFails = 0;
+        }
         updatePinDots();
         const err = document.getElementById('pinError');
         if (err) { err.style.display = 'block'; setTimeout(() => { err.style.display = 'none'; }, 2000); }
@@ -3060,12 +2764,12 @@ function updatePinDots() {
   });
 }
 
-function setPin() {
+async function setPin() {
   if (!requirePermission('settingsWrite')) return;
   const newPin = prompt('הכנס קוד PIN חדש בן 4 ספרות:');
   if (newPin === null) return;
   if (!/^\d{4}$/.test(newPin)) { alert('קוד PIN חייב להכיל בדיוק 4 ספרות'); return; }
-  settings.pin = newPin;
+  settings.pin = await hashPin(newPin);
   saveS();
   renderPinStatus();
   toast('🔒 PIN הוגדר בהצלחה');
@@ -3185,7 +2889,7 @@ let lastSyncTime = null;
 function saveAutoSync() {
   if (!requirePermission('settingsWrite')) return;
   const sel = document.getElementById('autoSyncSelect');
-  settings.autoSyncMins = parseInt(sel ? sel.value : 0, 10) || 0;
+  settings.autoSyncMins = parseInt(sel ? sel.value : 0) || 0;
   saveS();
   startAutoSync();
   toast(settings.autoSyncMins ? `☁️ סנכרון אוטומטי כל ${settings.autoSyncMins} דקות` : '☁️ סנכרון אוטומטי כבוי');
@@ -3193,26 +2897,13 @@ function saveAutoSync() {
 
 function startAutoSync() {
   if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null; }
-  const mins = parseInt(settings.autoSyncMins, 10) || 0;
+  const mins = parseInt(settings.autoSyncMins) || 0;
   const url = getGsUrl();
   if (!mins || !url) return;
   autoSyncTimer = setInterval(async () => {
     try {
-      let cloudData = null;
-      try {
-        const data1 = await fetchCloudJson(url + '?type=shivukim');
-        if (Array.isArray(data1)) cloudData = data1;
-      } catch (e1) {
-        try {
-          const data2 = await fetchCloudJson(url);
-          if (Array.isArray(data2)) cloudData = data2;
-        } catch (e2) {}
-      }
-      if (!cloudData) {
-        const res = await fetch(url + '?type=shivukim');
-        const parsed = await res.json();
-        if (Array.isArray(parsed)) cloudData = parsed;
-      }
+      const res = await fetch(cloudUrl());
+      const cloudData = await res.json();
       if (cloudData && Array.isArray(cloudData)) {
         const cloudIds = new Set(cloudData.map(r => r.id));
         const localPending = records.filter(r => r.status === 'pending' && !cloudIds.has(r.id));
@@ -3340,27 +3031,7 @@ function saveDerishotStorage(data) {
 
 
 function getPlanSlaughterhouses() {
-  // Start with defaults
-  const names = [...DEFAULT_SLAUGHTERHOUSES, 'כללי'];
-  // Add any names found in plan data
-  try {
-    const plan = JSON.parse(localStorage.getItem('poultry_plan_daily') || '{}');
-    Object.values(plan).forEach(dayMap => {
-      if (dayMap && typeof dayMap === 'object') {
-        Object.keys(dayMap).forEach(name => { if (name) names.push(name); });
-      }
-    });
-  } catch(e) {}
-  // Add any names found in shchita data
-  try {
-    const shchita = JSON.parse(localStorage.getItem('poultry_shchita') || '{}');
-    Object.values(shchita).forEach(dayMap => {
-      if (dayMap && typeof dayMap === 'object') {
-        Object.keys(dayMap).forEach(name => { if (name) names.push(name); });
-      }
-    });
-  } catch(e) {}
-  return uniqueNames(names);
+  return uniqueNames([...DEFAULT_SLAUGHTERHOUSES, 'כללי']);
 }
 
 function getPlanBucketForSlaughterhouse(name, planMap) {
@@ -3380,11 +3051,20 @@ function normalizePlanMapForCalendar(dayMap) {
 }
 
 function normalizeName(value) {
-  const clean = String(value || '').trim();
+  const clean = String(value || '').replace(/\s+/g, ' ').trim();
   const aliases = {
     'סלק אל קודס': 'מסלק אל קודס',
+    'מעוף מעיין יסכה': 'מעוף',
     'טרי חלק': 'טרי וחלק',
-    'מעוף מעיין יסכה': 'מעוף'
+    'עוף הבריה (מישור)': 'מישור',
+    'עוף הבירה': 'מישור',
+    'הדס יסכה (אשקלון)': 'אשקלון',
+    'מסלק אל קודס (חוסם משחטה)': 'מסלק אל קודס',
+    'חוסם (תרקומייה פלסטיק)': 'חוסם (תרקומייה)',
+    'סנטרל גלאט (לנדא)': 'עטרות',
+    'סנטרל גלאט בע"מ': 'עטרות',
+    'סנטרל גלאט': 'עטרות',
+    'לנדא': 'עטרות'
   };
   return aliases[clean] || clean;
 }
@@ -3604,9 +3284,11 @@ function saveDerishott() {
   renderDerishotGrid();
   toast('✅ דרישות נשמרו ל-' + derishotDate.split('-').reverse().join('.'));
 
-  // Sync to Google Sheets
-  const url = getGsUrl();
-  // derishott не имеет листа в GAS — только локальное сохранение
+  // Sync to Google Sheets (honest + очередь при неудаче)
+  {
+    const payload = { type: 'derishott', date: derishotDate, derishott: dayData };
+    cloudPost(payload).catch(() => { enqueueSync(payload); toast('⚠️ יסונכרן מאוחר יותר'); });
+  }
 }
 
 function copyDerishotFromYesterday() {
@@ -3647,6 +3329,7 @@ function getShchitaSlaughterhouses() {
 
 // ── Modal open/close ─────────────────────────────────
 function openShchitaModal() {
+  if (!requirePermission('shchitaWrite')) return;
   shchitaDate = getSafeIsoDate();
   const modal = document.getElementById('shchitaModal');
   if (modal) { modal.style.display = 'flex'; renderShchitaGrid(); }
@@ -3730,7 +3413,7 @@ function refreshShchitaBar(safeId, demand) {
 
 // ── Save ─────────────────────────────────────────────
 async function saveShchitaData() {
-  if (!requirePermission('planWrite')) return;
+  if (!requirePermission('shchitaWrite')) return;
   const slaughterhouses = getShchitaSlaughterhouses();
   const shchita = getShchita();
   if (!shchita[shchitaDate]) shchita[shchitaDate] = {};
@@ -3753,21 +3436,20 @@ async function saveShchitaData() {
   if (document.getElementById('planDailyGrid')) renderPlanView();
   if (document.getElementById('derishotGrid')) renderDerishotGrid();
 
-  // Sync to Google Sheets — one flat row per slaughterhouse (same format as old rows)
-  const url = getGsUrl();
-  if (!url || !Object.keys(dayData).length) return;
-
-  for (const [slaughter, qty] of Object.entries(dayData)) {
-    const payload = JSON.stringify({ type: 'shchita', date: shchitaDate, slaughter: slaughter, qty: qty });
-    fetch(urlWithToken(url), { method: 'POST', mode: 'no-cors', body: payload }).catch(() => {});
-    try {
-      await fetch(urlWithToken(url), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: payload });
-    } catch(e) {}
+  // Sync to Google Sheets (honest + очередь при неудаче)
+  if (!Object.keys(dayData).length) return;
+  const payload = { type: 'shchita', date: shchitaDate, shchita: dayData };
+  try {
+    await cloudPost(payload);
+    toast('✅ שחיטה בפועל סונכרנה לענן — ' + shchitaDate.split('-').reverse().join('.'));
+  } catch(e) {
+    enqueueSync(payload);
+    toast('⚠️ נשמר מקומית, יסונכרן מאוחר יותר');
   }
-  toast('✅ שחיטה בפועל סונכרנה לענן — ' + shchitaDate.split('-').reverse().join('.'));
 }
 
 function copyShchitaFromYesterday() {
+  if (!requirePermission('shchitaWrite')) return;
   const yesterday = new Date(shchitaDate);
   yesterday.setDate(yesterday.getDate() - 1);
   const yKey = getDateKey(yesterday);
@@ -3782,16 +3464,94 @@ function copyShchitaFromYesterday() {
   toast('📋 הועתק מ-' + yKey.split('-').reverse().join('.'));
 }
 
-function initShchitaPanel() {
-  // Show the FAB button
-  const fab = document.getElementById('shchitaFab');
-  if (fab) fab.style.display = can('planWrite') ? 'flex' : 'none';
-}
-
-
-
 const MONTHS_HE = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 let planEditCtx = null;
+
+// ===============================================
+// HOLIDAYS SYSTEM (חגים)
+// ===============================================
+const HOLIDAY_NAMES = [
+  { group: '🇮🇱 חגי ישראל', name: 'ראש השנה' },
+  { group: '🇮🇱 חגי ישראל', name: 'יום כיפור' },
+  { group: '🇮🇱 חגי ישראל', name: 'סוכות' },
+  { group: '🇮🇱 חגי ישראל', name: 'שמיני עצרת / שמחת תורה' },
+  { group: '🇮🇱 חגי ישראל', name: 'חנוכה' },
+  { group: '🇮🇱 חגי ישראל', name: 'פורים' },
+  { group: '🇮🇱 חגי ישראל', name: 'פסח' },
+  { group: '🇮🇱 חגי ישראל', name: 'שביעי של פסח' },
+  { group: '🇮🇱 חגי ישראל', name: 'יום הזיכרון' },
+  { group: '🇮🇱 חגי ישראל', name: 'יום העצמאות' },
+  { group: '🇮🇱 חגי ישראל', name: 'שבועות' },
+  { group: '🇮🇱 חגי ישראל', name: 'תשעה באב' },
+  { group: '🇮🇱 חגי ישראל', name: 'שבת (מנוחה)' },
+  { group: '🕌 חגי ערבים', name: 'עיד אל-פיטר (פסח רמדאן)' },
+  { group: '🕌 חגי ערבים', name: 'עיד אל-אדחא (קורבן)' },
+  { group: '🕌 חגי ערבים', name: "ראס א-סנה אל-הג'רייה" },
+  { group: '🕌 חגי ערבים', name: 'מולד א-נביא' },
+  { group: '🕌 חגי ערבים', name: 'ליל אל-קדר' },
+  { group: '🕌 חגי ערבים', name: 'יום ירושלים' },
+  { group: '✝️ חגי נוצרים', name: "חג המולד (כריסמס)" },
+  { group: '✝️ חגי נוצרים', name: "פסחא (איסטר)" },
+  { group: '✝️ חגי נוצרים', name: "סנט ג'ורג' (4 במאי)" },
+  { group: '📅 אחר', name: 'שביתה / עיצומים' },
+  { group: '📅 אחר', name: 'תקלה טכנית' },
+  { group: '📅 אחר', name: 'יום מנוחה אחר' },
+];
+
+function getHolidayKey(dateKey, slaughter) {
+  return `${dateKey}|${slaughter || ''}`;
+}
+function normalizeHolidayStore(raw) {
+  const clean = {};
+  Object.entries(raw || {}).forEach(([key, value]) => {
+    if (!key.includes('|') || !value || typeof value !== 'object') return;
+    clean[key] = { isHoliday: !!value.isHoliday, name: value.name || '' };
+  });
+  return clean;
+}
+function getHolidays() {
+  try { return normalizeHolidayStore(JSON.parse(localStorage.getItem('poultry_holidays') || '{}')); } catch { return {}; }
+}
+function saveHolidays(data) {
+  localStorage.setItem('poultry_holidays', JSON.stringify(normalizeHolidayStore(data)));
+}
+function isHolidayDate(dk, slaughter) {
+  if (!slaughter) return Object.keys(getHolidays()).some(key => key.startsWith(dk + '|') && getHolidays()[key]?.isHoliday);
+  return !!(getHolidays()[getHolidayKey(dk, slaughter)]?.isHoliday);
+}
+function getHolidayName(dk, slaughter) {
+  if (slaughter) return getHolidays()[getHolidayKey(dk, slaughter)]?.name || '';
+  const found = Object.entries(getHolidays()).find(([key, value]) => key.startsWith(dk + '|') && value?.isHoliday);
+  return found?.[1]?.name || '';
+}
+function getHolidaySummary(dk, slaughterhouses) {
+  const holidays = getHolidays();
+  const items = (slaughterhouses || [])
+    .map(slaughter => ({ slaughter, holiday: holidays[getHolidayKey(dk, slaughter)] }))
+    .filter(item => item.holiday?.isHoliday);
+  const names = [...new Set(items.map(item => item.holiday.name).filter(Boolean))];
+  return {
+    count: items.length,
+    all: items.length > 0 && items.length === (slaughterhouses || []).length,
+    label: names.length ? names.join(', ') : (items.length ? 'חג' : '')
+  };
+}
+
+// ביצוע = שחיטה בפועל אם קיים, אחרת שיווקים (משחטות חיצוניות: שיווקים בלבד)
+const EXTERNAL_SLAUGHTERHOUSES = ['מסלק אל קודס', 'חוסם (תרקומייה)'];
+function getEffectiveExecution(shchita, shivukim, slaughter) {
+  const sh = Number(shchita) || 0;
+  const sv = Number(shivukim) || 0;
+  // אם הוזנה שחיטה בפועל ידנית — עדיפות לה (גם למשחטות חיצוניות); אחרת שיווקים
+  return sh > 0 ? sh : sv;
+}
+
+// Format ISO date as DD/MM/YYYY
+function isoToDisplay(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
 
 function getPlan() {
   try { return JSON.parse(localStorage.getItem('poultry_plan_daily') || '{}'); } catch { return {}; }
@@ -3837,35 +3597,75 @@ function planToday() {
 
 function openPlanModal(dateKey, slaughter) {
   if (!requirePermission('planWrite')) return;
-  const ctx = getPlanModalContext(dateKey, slaughter);
   const plan = getPlan();
+  const current = plan[dateKey]?.[slaughter] || 0;
   const [y, m, d] = dateKey.split('-');
-  const dayDate = parseIsoDateLocal(dateKey) || new Date(dateKey);
-  const dayName = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][dayDate.getDay()];
-  document.getElementById('planModalTitle').textContent = `🏭 ${ctx.bucket}`;
-  document.getElementById('planModalSub').textContent = `יום ${dayName} — ${d}.${m}.${y}`;
-  const hintParts = [];
-  if (ctx.shchita > 0) hintParts.push(`שחיטה בפועל: <b>${formatNumber(ctx.shchita)}</b> (נמחק בלחצן «שחיטה בפועל»)`);
-  if (ctx.shivukim > 0) hintParts.push(`שיווקים: <b>${formatNumber(ctx.shivukim)}</b> (נמחק בלשונית ראשי/היסטוריה)`);
-  if (!hintParts.length) hintParts.push('רק יעד תכנון ניתן לעריכה כאן. מחיקה מוחקת את כל הגרסאות הישנות של אותו משחטה.');
-  const hintEl = document.getElementById('planModalHint');
-  if (hintEl) hintEl.innerHTML = hintParts.join('<br>');
-  document.getElementById('planTargetInput').value = ctx.target || '';
+  const dayName = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][new Date(dateKey).getDay()];
+  document.getElementById('planModalTitle').textContent = `🏭 ${slaughter}`;
+  document.getElementById('planModalSub').textContent = `יום ${dayName} — ${d}/${m}/${y}`;
 
-  const recent = new Set();
-  Object.values(plan).forEach(day => {
-    Object.entries(day || {}).forEach(([name, qty]) => {
-      if (getPlanBucketForSlaughterhouse(name) === ctx.bucket && qty > 0) recent.add(qty);
-    });
-  });
-  const top = [...recent].sort((a,b)=>b-a).slice(0,4);
-  document.getElementById('planQuickBtns').innerHTML = top.map(v =>
-    `<button type="button" onclick="document.getElementById('planTargetInput').value=${v}" style="padding:8px 14px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--primary); font-weight:800; font-size:13px; cursor:pointer;">${formatNumber(v)}</button>`
+  // Holiday state
+  const holidays = getHolidays();
+  const holidayKey = getHolidayKey(dateKey, slaughter);
+  const dayHoliday = holidays[holidayKey] || {};
+  const isHoliday = dayHoliday.isHoliday || false;
+
+  // Holiday section HTML
+  const groups = [...new Set(HOLIDAY_NAMES.map(h => h.group))];
+  const optionsHtml = groups.map(g =>
+    `<optgroup label="${escapeHtml(g)}">${HOLIDAY_NAMES.filter(h=>h.group===g).map(h=>`<option value="${escapeHtml(h.name)}"${dayHoliday.name===h.name?' selected':''}>${escapeHtml(h.name)}</option>`).join('')}</optgroup>`
   ).join('');
 
-  planEditCtx = { dateKey, slaughter: ctx.bucket, bucket: ctx.bucket };
+  const holidaySectionEl = document.getElementById('planHolidaySection');
+  if (holidaySectionEl) {
+    holidaySectionEl.innerHTML = `
+      <div style="margin-bottom:14px; padding:12px 14px; border-radius:14px; border:2px solid ${isHoliday?'#D32F2F':'var(--border)'}; background:${isHoliday?'#FFF3E0':'var(--surface)'}; transition:all 0.2s;">
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:800; font-size:14px; color:${isHoliday?'#BF360C':'var(--text)'};">
+          <input type="checkbox" id="planHolidayToggle" ${isHoliday?'checked':''} onchange="onHolidayToggle()" style="width:18px; height:18px; cursor:pointer; accent-color:#D32F2F;">
+          🎌 סמן כחג — המכונה לא עובדת (יחושב כ-0)
+        </label>
+        <div id="planHolidayDropWrap" style="display:${isHoliday?'block':'none'}; margin-top:10px;">
+          <select id="planHolidaySelect"
+            style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #FFCCBC; background:#FFF8E1; color:#BF360C; font-size:13px; font-weight:700;">
+            <option value="">— בחר שם החג —</option>
+            ${optionsHtml}
+          </select>
+        </div>
+      </div>`;
+  }
+
+  document.getElementById('planTargetInput').value = isHoliday ? '' : (current || '');
+  document.getElementById('planTargetInput').disabled = isHoliday;
+  document.getElementById('planTargetInput').style.opacity = isHoliday ? '0.4' : '1';
+
+  // Quick buttons from recent values for this slaughterhouse
+  const recent = new Set();
+  Object.values(plan).forEach(day => { if (day[slaughter]) recent.add(day[slaughter]); });
+  const top = [...recent].sort((a,b)=>b-a).slice(0,4);
+  document.getElementById('planQuickBtns').innerHTML = top.map(v =>
+    `<button onclick="if(!document.getElementById('planHolidayToggle').checked)document.getElementById('planTargetInput').value=${v}" style="padding:8px 14px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--primary); font-weight:800; font-size:13px; cursor:pointer;">${formatNumber(v)}</button>`
+  ).join('');
+
+  planEditCtx = { dateKey, slaughter };
   document.getElementById('planModal').style.display = 'flex';
   setTimeout(() => document.getElementById('planTargetInput').focus(), 100);
+}
+
+function onHolidayToggle() {
+  const cb = document.getElementById('planHolidayToggle');
+  const wrap = document.getElementById('planHolidayDropWrap');
+  const inp = document.getElementById('planTargetInput');
+  const section = cb?.closest('div[style]');
+  if (!cb) return;
+  const isOn = cb.checked;
+  if (wrap) wrap.style.display = isOn ? 'block' : 'none';
+  if (inp) { inp.disabled = isOn; inp.style.opacity = isOn ? '0.4' : '1'; if (!isOn) inp.focus(); }
+  if (section) {
+    section.style.borderColor = isOn ? '#D32F2F' : 'var(--border)';
+    section.style.background  = isOn ? '#FFF3E0' : 'var(--surface)';
+    const lbl = section.querySelector('label');
+    if (lbl) lbl.style.color = isOn ? '#BF360C' : 'var(--text)';
+  }
 }
 
 function closePlanModal() {
@@ -3873,43 +3673,48 @@ function closePlanModal() {
   planEditCtx = null;
 }
 
-async function savePlanTarget() {
+function savePlanTarget() {
   if (!requirePermission('planWrite')) return;
   if (!planEditCtx) return;
-  const { dateKey, bucket } = planEditCtx;
-  const slaughter = bucket || planEditCtx.slaughter;
-  const val = Number(document.getElementById('planTargetInput').value) || 0;
-  const plan = getPlan();
-  const derishott = getDerishott();
-  if (!plan[dateKey]) plan[dateKey] = {};
-  purgeBucketFromDayMap(plan[dateKey], slaughter);
-  if (val > 0) plan[dateKey][slaughter] = val;
-  if (!Object.keys(plan[dateKey]).length) delete plan[dateKey];
-  if (derishott[dateKey]) {
-    purgeBucketFromDayMap(derishott[dateKey], slaughter);
-    if (!Object.keys(derishott[dateKey]).length) delete derishott[dateKey];
+  const { dateKey, slaughter } = planEditCtx;
+  const isHoliday = document.getElementById('planHolidayToggle')?.checked || false;
+
+  // Save holiday data
+  const holidays = getHolidays();
+  const holidayKey = getHolidayKey(dateKey, slaughter);
+  if (isHoliday) {
+    const name = document.getElementById('planHolidaySelect')?.value || '';
+    holidays[holidayKey] = { isHoliday: true, name };
+  } else {
+    delete holidays[holidayKey];
   }
-  saveDerishotStorage(derishott);
+  saveHolidays(holidays);
+
+  // Save plan target (if not holiday)
+  const val = isHoliday ? 0 : (Number(document.getElementById('planTargetInput').value) || 0);
+  const plan = getPlan();
+  if (!plan[dateKey]) plan[dateKey] = {};
+  if (val > 0) plan[dateKey][slaughter] = val;
+  else delete plan[dateKey][slaughter];
+  if (!Object.keys(plan[dateKey]).length) delete plan[dateKey];
   savePlan(plan);
   closePlanModal();
   renderPlanView();
-  if (document.getElementById('derishotGrid')) renderDerishotGrid();
-  toast(val > 0 ? '✅ יעד נשמר' : '✅ יעד נמחק');
+  toast(isHoliday ? `🎌 ${dateKey.split('-').reverse().join('/')} — סומן כחג` : '✅ יעד נשמר');
 
-  const url = getGsUrl();
-  if (url) {
-    // שלח באותו פורמט כמו שחיטה — מפה של {משחטה: כמות} כדי שה־Apps Script יפרק לעמודות נפרדות
-    const payload = JSON.stringify({ type: 'tochnit', date: dateKey, slaughter: slaughter, qty: val });
-    fetch(urlWithToken(url), { method: 'POST', mode: 'no-cors', body: payload }).catch(() => {});
-    try {
-      await fetch(urlWithToken(url), { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: payload });
-    } catch(e) {}
-    // derishott не имеет отдельного листа в GAS — пропускаем
+  // Sync to Google Sheets (honest + очередь при неудаче)
+  {
+    const pTochnit = { type: 'tochnit', date: dateKey, slaughter, qty: val };
+    const pHoliday = { type: 'holidays', date: dateKey, slaughter, isHoliday, name: holidays[holidayKey]?.name || '' };
+    cloudPost(pTochnit).catch(() => enqueueSync(pTochnit));
+    cloudPost(pHoliday).catch(() => enqueueSync(pHoliday));
   }
 }
 
 function clearPlanTarget() {
   if (!requirePermission('planWrite')) return;
+  const cb = document.getElementById('planHolidayToggle');
+  if (cb) { cb.checked = false; onHolidayToggle(); }
   document.getElementById('planTargetInput').value = '';
   savePlanTarget();
 }
@@ -3920,11 +3725,16 @@ function renderPlanView() {
   const slaughterhouses = getPlanSlaughterhouses();
   const today = getSafeIsoDate();
 
-  // ── Log plan and shchita data for debugging ──
-  const planKeys = Object.keys(plan);
-  const shchitaAll = getShchita();
-  const shchitaKeys = Object.keys(shchitaAll);
-  dlog('renderPlanView: Plan dates:', planKeys.length, '| Shchita dates:', shchitaKeys.length);
+  // Build actual map: dateKey -> slaughter -> qty (from marketing records)
+  const actualMap = {};
+  records.forEach(r => {
+    const d = getRecordDate(r);
+    if (!d) return;
+    const dk = getDateKey(d);
+    const s = getPlanBucketForSlaughterhouse(r.slaughterhouse);
+    if (!actualMap[dk]) actualMap[dk] = {};
+    actualMap[dk][s] = (actualMap[dk][s] || 0) + (Number(r.quantity) || 0);
+  });
 
   // Build shchita map: dateKey -> slaughter -> qty (from שחיטה בפועל)
   const shchitaStorageAll = getShchita();
@@ -3947,7 +3757,7 @@ function renderPlanView() {
     `<th style="min-width:${colW}px; padding:8px 4px; background:#1B5E20; color:#fff; font-size:11px; font-weight:800; text-align:center; white-space:nowrap; position:sticky; top:0; z-index:5; box-shadow:0 2px 0 rgba(0,0,0,0.08);">${s}</th>`
   ).join('');
 
-  let monthTarget = 0, monthShchita = 0;
+  let monthTarget = 0, monthActual = 0, monthShchita = 0;
 
   let rows = '';
   for (let day = 1; day <= daysInMonth; day++) {
@@ -3958,61 +3768,70 @@ function renderPlanView() {
     const isToday = dk === today;
     const isSaturday = dow === 6;
     const isWeekend = dow === 5 || dow === 6;
-    const dayPlan = getDayPlanDisplayMap(dk);
+    const dayPlan = normalizePlanMapForCalendar(plan[dk] || {});
+    const dayActual = actualMap[dk] || {};
     const dayShchita = shchitaMap[dk] || {};
+    const holidaySummary = getHolidaySummary(dk, slaughterhouses);
+    const isHoliday = holidaySummary.count > 0;
+    const holidayName = holidaySummary.label;
 
-    const dayTotal = slaughterhouses.reduce((s,k) => s + (dayPlan[k]||0), 0);
-    const dayShchitaTotal = slaughterhouses.reduce((s,k) => s + (dayShchita[k]||0), 0);
-    const dayEffectiveTotal = dayShchitaTotal;
+    const dayTotal = slaughterhouses.reduce((sum, key) => sum + (isHolidayDate(dk, key) ? 0 : (dayPlan[key] || 0)), 0);
+    const dayActualTotal = slaughterhouses.reduce((sum, key) => sum + (isHolidayDate(dk, key) ? 0 : (dayActual[key] || 0)), 0);
+    const dayShchitaTotal = slaughterhouses.reduce((sum, key) => sum + (isHolidayDate(dk, key) ? 0 : (dayShchita[key] || 0)), 0);
     monthTarget += dayTotal;
+    monthActual += dayActualTotal;
     monthShchita += dayShchitaTotal;
 
-    const totalPct = dayTotal > 0 ? Math.round(dayEffectiveTotal/dayTotal*100) : null;
+    // For % calculation: prefer shchita data over marketing records
+    const dayEffectiveActual = dayShchitaTotal > 0 ? dayShchitaTotal : dayActualTotal;
+    const totalPct = dayTotal > 0 ? Math.round(dayEffectiveActual/dayTotal*100) : null;
 
-    const rowBg = isToday ? '#E8F5E9' : isSaturday ? '#FFF3E0' : isWeekend ? '#FFF8E1' : '';
+    const rowBg = holidaySummary.all ? '#FBE9E7' : isHoliday ? '#FFF8E1' : isToday ? '#E8F5E9' : isSaturday ? '#FFF3E0' : isWeekend ? '#FFF8E1' : '';
     const cells = slaughterhouses.map(s => {
+      if (isHolidayDate(dk, s)) {
+        const oneHolidayName = getHolidayName(dk, s);
+        return `<td style="padding:2px 3px; text-align:center; background:#FFCCBC; border-left:1px solid #eee; cursor:pointer;" onclick="openPlanModal('${dk}','${s}')" title="${escapeHtml(oneHolidayName || 'חג')}">
+          <div style="font-size:9px; color:#BF360C; font-weight:800;">🎌</div>
+          <div style="font-size:8px; color:#BF360C; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:46px; margin:auto;">${escapeHtml(oneHolidayName || 'חג')}</div>
+        </td>`;
+      }
       const target = dayPlan[s] || 0;
+      const actual = dayActual[s] || 0;
       const shchita = dayShchita[s] || 0;
-      const effectiveActual = shchita;
+      // For % bar: prefer shchita over marketing
+      const effectiveActual = shchita > 0 ? shchita : actual;
       const pct = target > 0 ? Math.round(effectiveActual/target*100) : null;
-      // love.html logic: green 95-105%, yellow 85-115%, red otherwise (>15% deviation)
-      const dev = pct === null ? null : Math.abs(pct - 100);
-      const bg = pct === null ? '' : dev <= 5 ? '#E8F5E9' : dev <= 15 ? '#FFF8E1' : effectiveActual > 0 || target > 0 ? '#FFEBEE' : '';
-      const col = pct === null ? '' : dev <= 5 ? '#2E7D32' : dev <= 15 ? '#F57F17' : '#C62828';
-      const safeSlaughter = escapeHtml(s);
-      return `<td class="plan-grid-cell" data-plan-date="${dk}" data-plan-slaughter="${safeSlaughter}" style="padding:2px 3px; text-align:center; background:${bg}; cursor:pointer; border-left:1px solid #eee;">
-        ${target ? `<div style="font-size:12px; font-weight:800; color:#1B5E20;">${(target/1000).toFixed(1)}k</div>` : `<div style="font-size:11px; color:#ccc;">—</div>`}
-        ${shchita ? `<div style="font-size:10px; color:#1565C0; font-weight:800;" title="שחיטה בפועל">✅ ${(shchita/1000).toFixed(1)}k</div>` : ''}
-
+      const bg = pct === null ? '' : pct >= 100 ? '#E8F5E9' : pct >= 70 ? '#FFF8E1' : effectiveActual > 0 ? '#FFEBEE' : '';
+      const col = pct === null ? '' : pct >= 100 ? '#2E7D32' : pct >= 70 ? '#F57F17' : '#C62828';
+      return `<td style="padding:2px 3px; text-align:center; background:${bg}; cursor:pointer; border-left:1px solid #eee;" onclick="openPlanModal('${dk}','${s}')">
+        ${target ? `<div style="font-size:12px; font-weight:800; color:#1B5E20;" title="תוכנית">${(target/1000).toFixed(1)}k</div>` : (shchita ? '' : `<div style="font-size:11px; color:#ccc;">—</div>`)}
+        ${shchita ? `<div style="font-size:11px; color:#1565C0; font-weight:800;" title="ביצוע בפועל (שחיטה)">✅ ${(shchita/1000).toFixed(1)}k</div>` : ''}
       </td>`;
     }).join('');
 
+    const dateColContent = isHoliday
+      ? `<span style="font-size:10px; color:#aaa; display:block;">${DAYS_HE[dow]}'</span>
+         <span style="color:#BF360C; font-weight:900;">${dd}/${mm}</span>
+         <div style="font-size:8px; color:#BF360C; font-weight:800; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:72px;" title="${escapeHtml(holidayName)}">🎌 ${holidaySummary.count}/${slaughterhouses.length} ${escapeHtml(holidayName||'חג')}</div>`
+      : `<span style="font-size:10px; color:#aaa; display:block;">${DAYS_HE[dow]}'</span>
+         <span style="${isToday ? 'color:#1B5E20;' : isSaturday ? 'color:#E65100;' : ''}">${dd}/${mm}</span>
+         ${dayTotal > 0 ? `<div style="font-size:9px; color:${totalPct >= 100 ? '#2E7D32' : totalPct >= 70 ? '#F57F17' : totalPct !== null ? '#C62828' : '#888'}; font-weight:800; margin-top:1px;">${totalPct !== null ? totalPct+'%' : '✏️'}</div>` : ''}`;
+
     rows += `<tr style="border-bottom:1px solid #eee; ${rowBg ? 'background:' + rowBg + ';' : ''}">
       <td style="padding:6px 8px; font-weight:${isToday?'900':'700'}; font-size:12px; white-space:nowrap; position:sticky; right:0; background:${rowBg||'var(--surface)'}; z-index:1; border-left:2px solid #ddd;">
-        <span style="font-size:10px; color:#aaa; display:block;">${DAYS_HE[dow]}'</span>
-        <span style="${isToday ? 'color:#1B5E20;' : isSaturday ? 'color:#E65100;' : ''}">${dd}/${mm}</span>
-        ${dayTotal > 0 ? (() => { const d = totalPct === null ? null : Math.abs(totalPct - 100); const c = d === null ? '#888' : d <= 5 ? '#2E7D32' : d <= 15 ? '#F57F17' : '#C62828'; return `<div style="font-size:9px; color:${c}; font-weight:800; margin-top:1px;">${totalPct !== null ? totalPct+'%' : '✏️'}</div>`; })() : ''}
+        ${dateColContent}
       </td>
       ${cells}
     </tr>`;
   }
 
-  let monthEffective = 0;
-  for (let day = 1; day <= daysInMonth; day++) {
-    const mm = String(planNavMonth + 1).padStart(2,'0');
-    const dd = String(day).padStart(2,'0');
-    const dk = `${planNavYear}-${mm}-${dd}`;
-    const dayShchita = shchitaMap[dk] || {};
-    slaughterhouses.forEach(k => {
-      monthEffective += (dayShchita[k] || 0);
-    });
-  }
+  // For % use shchita totals if available, else marketing
+  const monthEffective = monthShchita > 0 ? monthShchita : monthActual;
   const monthPct = monthTarget > 0 ? Math.round(monthEffective/monthTarget*100) : null;
   const pctCol = monthPct === null ? '#999' : monthPct >= 100 ? '#2E7D32' : monthPct >= 70 ? '#F57F17' : '#C62828';
 
   const grid = document.getElementById('planDailyGrid');
   if (!grid) return;
-
   grid.innerHTML = `
     <div style="overflow:visible;">
       <table style="border-collapse:collapse; width:100%; min-width:${60 + slaughterhouses.length * colW}px;">
@@ -4025,12 +3844,13 @@ function renderPlanView() {
     </div>
     <div style="padding:8px 16px 4px; font-size:10px; color:#888; display:flex; gap:12px; flex-wrap:wrap;">
       <span>🟢 ירוק = יעד תכנון</span>
-      <span>🔵 <b>✅ כחול</b> = שחיטה בפועל</span>
+      <span>🔵 <b>✅ כחול</b> = ביצוע בפועל (שחיטה)</span>
+      <span>🎌 <b style="color:#BF360C;">אדום</b> = חג (לא עובדים)</span>
     </div>`;
 
   const summary = document.getElementById('planMonthlySummary');
   if (summary) summary.innerHTML = `
-    <div style="display:grid; grid-template-columns:1fr 1fr ${monthShchita > 0 ? '1fr' : ''}; gap:8px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr ${monthShchita > 0 ? '1fr' : ''}; gap:8px;">
       <div style="background:var(--surface); border-radius:12px; padding:12px; box-shadow:var(--shadow); text-align:center;">
         <div style="font-size:18px; font-weight:800; color:#1B5E20;">${formatNumber(monthTarget)}</div>
         <div style="font-size:10px; color:var(--text-secondary); margin-top:3px; font-weight:700;">🎯 יעד חודשי</div>
@@ -4039,6 +3859,10 @@ function renderPlanView() {
         <div style="font-size:18px; font-weight:800; color:#1565C0;">${formatNumber(monthShchita)}</div>
         <div style="font-size:10px; color:#1565C0; margin-top:3px; font-weight:700;">✅ שחיטה בפועל</div>
       </div>` : ''}
+      <div style="background:var(--surface); border-radius:12px; padding:12px; box-shadow:var(--shadow); text-align:center;">
+        <div style="font-size:18px; font-weight:800; color:#388E3C;">${formatNumber(monthActual)}</div>
+        <div style="font-size:10px; color:var(--text-secondary); margin-top:3px; font-weight:700;">📦 שיווקים</div>
+      </div>
       <div style="background:var(--surface); border-radius:12px; padding:12px; box-shadow:var(--shadow); text-align:center;">
         <div style="font-size:18px; font-weight:800; color:${pctCol};">${monthPct !== null ? monthPct + '%' : '—'}</div>
         <div style="font-size:10px; color:var(--text-secondary); margin-top:3px; font-weight:700;">📈 ביצוע</div>
@@ -4089,22 +3913,6 @@ async function exportPlanVsActualExcel() {
     });
     if (!chosen) return;
 
-    // Refresh tochnit+shchita before building the report
-    toast('⏳ מושך נתונים מהענן...');
-    try {
-      const lv = await apiGetAllLove();
-      if (lv && lv.ok) {
-        if (Array.isArray(lv.tochnit) && lv.tochnit.length) {
-          const n=aggregateLove(lv.tochnit); const lo=getPlan();
-          Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); savePlan(lo);
-        }
-        if (Array.isArray(lv.shchita) && lv.shchita.length) {
-          const n=aggregateLove(lv.shchita); const loS=getShchita();
-          Object.entries(n).forEach(([dt,sl])=>{if(!loS[dt])loS[dt]={};Object.assign(loS[dt],sl);}); saveShchitaStorage(loS);
-        }
-      }
-    } catch(e) {}
-
     toast('⏳ מכין דוח...');
 
     const [cy, cm, cdd] = chosen.split('-');
@@ -4129,17 +3937,20 @@ async function exportPlanVsActualExcel() {
     // 1b. Load actual slaughter data
     const shchitaDayData = normalizePlanMapForCalendar(getShchita()[chosen] || {});
 
-    // 2. Plan source (plan + דרישות merged)
-    const planMap = getDayPlanDisplayMap(chosen);
+    // 2. Plan source
+    let planMap = {};
     const localDerishott = getDerishott();
-    const localPlan = getPlan();
+    if (localDerishott[chosen] && Object.keys(localDerishott[chosen]).length > 0) {
+      planMap = normalizePlanMapForCalendar(localDerishott[chosen]);
+    } else {
+      const localPlan = getPlan();
+      if (localPlan[chosen] && Object.keys(localPlan[chosen]).length > 0) {
+        planMap = normalizePlanMapForCalendar(localPlan[chosen]);
+      }
+    }
     const hasPlan = Object.keys(planMap).length > 0;
     const planSource = hasPlan
-      ? (localDerishott[chosen] && localPlan[chosen]
-          ? '📋 מקור תכנון: דרישות + לוח שנתי'
-          : localDerishott[chosen]
-            ? '📋 מקור תכנון שחיטות: דרישות יומיות'
-            : '📅 מקור תכנון שחיטות: לוח תכנית שנתית')
+      ? (localDerishott[chosen] ? '📋 מקור תכנון שחיטות: דרישות יומיות' : '📅 מקור תכנון שחיטות: לוח תכנית שנתית')
       : '⚠️ לא נמצא תכנון — מוצגים שיווקים בלבד';
 
     actualRows.forEach(item => {
@@ -4228,8 +4039,8 @@ async function exportPlanVsActualExcel() {
       const actual   = bySlaughter[s] || 0;
       let shchitaQ = shchitaDayData[s] || 0;
 
-      // במשחטות חיצוניות השחיטה בפועל שווה אוטומטית לביצוע השיווק
-      if (s === 'מסלק אל קודס' || s === 'חוסם (תרקומייה)') {
+      // במשחטות חיצוניות: אם לא הוזנה שחיטה ידנית — ביצוע = שיווקים; אם הוזנה — עדיפות לידני
+      if ((s === 'מסלק אל קודס' || s === 'חוסם (תרקומייה)') && shchitaQ === 0) {
         shchitaQ = actual;
       }
 
@@ -4336,9 +4147,10 @@ function hideCloudOverlay() {
 // Collect all dates between startIso and endIso (inclusive) — local calendar days
 function getDatesInRange(startIso, endIso) {
   const dates = [];
-  const cur = parseIsoDateLocal(startIso);
-  const end = parseIsoDateLocal(endIso);
-  if (!cur || !end) return dates;
+  const [sy, sm, sd] = startIso.split('-').map(Number);
+  const [ey, em, ed] = endIso.split('-').map(Number);
+  const cur = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
   while (cur <= end) {
     dates.push(getDateKey(cur));
     cur.setDate(cur.getDate() + 1);
@@ -4352,16 +4164,19 @@ function getPlanVsActualForRange(startIso, endIso) {
   const plan      = getPlan();
   const derishott = getDerishott();
   const shchita   = getShchita();
-  const slaughterhouses = getPlanSlaughterhouses();
+  // דוח תקופתי: משחטות פנימיות נשארות בנפרד; כל השאר (מסלק אל קודס, חוסם, מכירות/מזדמנות) מתאחדות ל"כללי"
+  const REPORT_KEEP = ['מעוף','טרי וחלק','מישור','אשקלון','עטרות','מעוף 2'];
+  const reportBucket = n => REPORT_KEEP.includes(n) ? n : 'כללי';
+  const foldToReport = m => { const o = {}; Object.entries(m || {}).forEach(([k, v]) => { const b = reportBucket(k); o[b] = (o[b] || 0) + (Number(v) || 0); }); return o; };
+  const slaughterhouses = [...REPORT_KEEP, 'כללי'];
 
   // שיווקים map: date -> slaughter -> qty
   const shivukimMap = {};
-  records.forEach(raw => {
-    const r = normalizeRecord(raw);
-    const d = r.parsedDate || getRecordDate(r); if (!d) return;
+  records.forEach(r => {
+    const d = getRecordDate(r); if (!d) return;
     const dk = getDateKey(d);
     if (!dates.includes(dk)) return;
-    const bucket = canonicalSlaughter(r.slaughterhouse) || getPlanBucketForSlaughterhouse(r.slaughterhouse);
+    const bucket = reportBucket(getPlanBucketForSlaughterhouse(r.slaughterhouse));
     if (!shivukimMap[dk]) shivukimMap[dk] = {};
     shivukimMap[dk][bucket] = (shivukimMap[dk][bucket] || 0) + (Number(r.quantity) || 0);
   });
@@ -4376,9 +4191,21 @@ function getPlanVsActualForRange(startIso, endIso) {
   const dailyRows = []; // { date, bySlaughter: { s: {planned,shchita,shivukim} } }
 
   dates.forEach(dk => {
-    const dayPlan = getDayPlanDisplayMap(dk);
-    const dayShchita  = shchita[dk]   || {};
-    const dayShivukim = shivukimMap[dk] || {};
+    // prefer derishott over plan; holidays count as 0 only for the marked slaughterhouse
+    const dayPlanRaw = foldToReport(Object.keys((derishott[dk]||{})).length > 0
+      ? normalizePlanMapForCalendar(derishott[dk])
+      : normalizePlanMapForCalendar((plan[dk]||{})));
+    const dayShchitaRaw  = foldToReport(normalizePlanMapForCalendar(shchita[dk] || {}));
+    const dayShivukimRaw = shivukimMap[dk] || {};
+    const dayPlan = {};
+    const dayShchita = {};
+    const dayShivukim = {};
+    slaughterhouses.forEach(s => {
+      if (isHolidayDate(dk, s)) return;
+      dayPlan[s] = dayPlanRaw[s] || 0;
+      dayShchita[s] = dayShchitaRaw[s] || 0;
+      dayShivukim[s] = dayShivukimRaw[s] || 0;
+    });
 
     const dayRow = { date: dk, bySlaughter: {} };
 
@@ -4386,12 +4213,11 @@ function getPlanVsActualForRange(startIso, endIso) {
       const pl = dayPlan[s]    || 0;
       const sh = dayShchita[s] || 0;
       const sv = dayShivukim[s]|| 0;
-      const eff = getEffectivePerformanceQty(sh, sv);
       bySlaughter[s].planned   += pl;
       bySlaughter[s].shchita   += sh;
       bySlaughter[s].shivukim  += sv;
-      bySlaughter[s].effective += eff;
-      dayRow.bySlaughter[s] = { planned: pl, shchita: sh, shivukim: sv, effective: eff };
+      bySlaughter[s].effective += getEffectiveExecution(sh, sv, s);
+      dayRow.bySlaughter[s] = { planned: pl, shchita: sh, shivukim: sv };
     });
     dailyRows.push(dayRow);
   });
@@ -4401,12 +4227,11 @@ function getPlanVsActualForRange(startIso, endIso) {
     bySlaughter[s].planned > 0 || bySlaughter[s].shchita > 0 || bySlaughter[s].shivukim > 0
   );
 
-  const totals = { planned:0, shchita:0, shivukim:0, effective:0 };
+  const totals = { planned:0, shchita:0, shivukim:0 };
   activeSlaughterhouses.forEach(s => {
-    totals.planned   += bySlaughter[s].planned;
-    totals.shchita   += bySlaughter[s].shchita;
-    totals.shivukim  += bySlaughter[s].shivukim;
-    totals.effective += bySlaughter[s].effective;
+    totals.planned  += bySlaughter[s].planned;
+    totals.shchita  += bySlaughter[s].shchita;
+    totals.shivukim += bySlaughter[s].shivukim;
   });
 
   return { activeSlaughterhouses, bySlaughter, dailyRows, dates, totals };
@@ -4418,7 +4243,7 @@ function buildPlanVsActualChartSvg(activeSlaughterhouses, bySlaughter, periodLab
   const width = 900, barStart = 220, rowH = 70, padBottom = 40;
   const height = 80 + activeSlaughterhouses.length * rowH + padBottom;
   const maxVal = Math.max(1, ...activeSlaughterhouses.map(s =>
-    Math.max(bySlaughter[s].planned, bySlaughter[s].shchita, bySlaughter[s].shivukim)
+    Math.max(bySlaughter[s].planned, bySlaughter[s].effective || 0)
   ));
   const barMaxW = width - barStart - 160;
   const bg = '#F6FBF7';
@@ -4426,24 +4251,21 @@ function buildPlanVsActualChartSvg(activeSlaughterhouses, bySlaughter, periodLab
   const rows = activeSlaughterhouses.map((s, i) => {
     const d = bySlaughter[s];
     const y = 72 + i * rowH;
-    const wPl = d.planned  ? Math.round(d.planned  / maxVal * barMaxW) : 0;
-    const wSh = d.shchita  ? Math.round(d.shchita  / maxVal * barMaxW) : 0;
-    const wSv = d.shivukim ? Math.round(d.shivukim / maxVal * barMaxW) : 0;
-    const pct = d.planned > 0 ? Math.round((d.effective || getEffectivePerformanceQty(d.shchita, d.shivukim)) / d.planned * 100) : null;
+    const eff = d.effective || 0;
+    const wPl = d.planned ? Math.round(d.planned / maxVal * barMaxW) : 0;
+    const wEf = eff        ? Math.round(eff        / maxVal * barMaxW) : 0;
+    const pct = d.planned > 0 ? Math.round(eff / d.planned * 100) : null;
     const pctColor = pct===null?'#999':pct>=100?'#2E7D32':pct>=70?'#F57F17':'#C62828';
     const label = escapeXml(truncateLabel(s, 24));
     return `
-      <text x="${barStart-10}" y="${y+10}" text-anchor="end" font-family="Segoe UI,Arial,sans-serif" font-size="13" fill="#355A3C" font-weight="700">${label}</text>
+      <text x="${barStart-10}" y="${y+18}" text-anchor="end" font-family="Segoe UI,Arial,sans-serif" font-size="13" fill="#355A3C" font-weight="700">${label}</text>
       <!-- תכנון -->
-      <rect x="${barStart}" y="${y}" width="${Math.max(wPl,2)}" height="16" rx="8" fill="#C8E6C9" opacity="0.9"/>
-      <text x="${barStart+Math.max(wPl,2)+5}" y="${y+12}" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#1B5E20">${d.planned>0?formatNumber(d.planned):''}</text>
-      <!-- שחיטה בפועל -->
-      <rect x="${barStart}" y="${y+19}" width="${Math.max(wSh,2)}" height="16" rx="8" fill="#1565C0" opacity="0.85"/>
-      <text x="${barStart+Math.max(wSh,2)+5}" y="${y+31}" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#1565C0" font-weight="700">${d.shchita>0?formatNumber(d.shchita):''}</text>
-      <!-- שיווקים (if no shchita) -->
-      ${d.shchita===0&&d.shivukim>0?`<rect x="${barStart}" y="${y+38}" width="${Math.max(wSv,2)}" height="14" rx="7" fill="#78909C" opacity="0.7"/>
-      <text x="${barStart+Math.max(wSv,2)+5}" y="${y+50}" font-family="Segoe UI,Arial,sans-serif" font-size="10" fill="#546E7A">${formatNumber(d.shivukim)} שיווקים</text>`:''}
-      ${pct!==null?`<text x="${width-10}" y="${y+20}" text-anchor="end" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="800" fill="${pctColor}">${pct}%</text>`:''}
+      <rect x="${barStart}" y="${y}" width="${Math.max(wPl,2)}" height="18" rx="9" fill="#C8E6C9" opacity="0.9"/>
+      <text x="${barStart+Math.max(wPl,2)+5}" y="${y+13}" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#1B5E20">${d.planned>0?formatNumber(d.planned):''}</text>
+      <!-- ביצוע -->
+      <rect x="${barStart}" y="${y+22}" width="${Math.max(wEf,2)}" height="18" rx="9" fill="#1565C0" opacity="0.85"/>
+      <text x="${barStart+Math.max(wEf,2)+5}" y="${y+35}" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#1565C0" font-weight="700">${eff>0?formatNumber(eff):''}</text>
+      ${pct!==null?`<text x="${width-10}" y="${y+24}" text-anchor="end" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="800" fill="${pctColor}">${pct}%</text>`:''}
     `;
   }).join('');
 
@@ -4452,15 +4274,13 @@ function buildPlanVsActualChartSvg(activeSlaughterhouses, bySlaughter, periodLab
     <rect x="${barStart}" y="${height-32}" width="14" height="14" rx="4" fill="#C8E6C9"/>
     <text x="${barStart+18}" y="${height-21}" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#555">תכנון</text>
     <rect x="${barStart+80}" y="${height-32}" width="14" height="14" rx="4" fill="#1565C0"/>
-    <text x="${barStart+98}" y="${height-21}" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#555">שחיטה בפועל</text>
-    <rect x="${barStart+210}" y="${height-32}" width="14" height="14" rx="4" fill="#78909C"/>
-    <text x="${barStart+228}" y="${height-21}" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#555">שיווקים</text>
+    <text x="${barStart+98}" y="${height-21}" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#555">ביצוע</text>
   `;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
     <rect width="${width}" height="${height}" rx="20" fill="${bg}"/>
     <text x="${width-20}" y="40" text-anchor="end" font-family="Segoe UI,Arial,sans-serif" font-size="17" font-weight="800" fill="#12381B">תכנון מול ביצוע | ${escapeXml(periodLabel)}</text>
-    <text x="${width-20}" y="58" text-anchor="end" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#888">% = (שחיטה בפועל / תכנון)</text>
+    <text x="${width-20}" y="58" text-anchor="end" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#888">% = (ביצוע / תכנון) — ביצוע = שחיטה בפועל, ושיווקים כשאין שחיטה</text>
     ${rows}
     ${legend}
   </svg>`;
@@ -4482,38 +4302,54 @@ async function exportPeriodExcel() {
       const prevWE   = new Date(weekEnd);    prevWE.setDate(weekEnd.getDate()-7);
       const prevMS   = new Date(todayObj.getFullYear(),todayObj.getMonth()-1,1);
       const prevME   = new Date(todayObj.getFullYear(),todayObj.getMonth(),0);
-      const iso      = d=>getDateKey(d);
+      const iso      = d=>d.toISOString().slice(0,10);
       const fmt      = d=>`${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
 
       const overlay = document.createElement('div');
       overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;justify-content:center;';
       overlay.setAttribute('data-pm','');
+      // Default selection: current week
+      overlay.dataset.sel = 'wk';
+
+      const BTN_ACTIVE_GREEN  = 'padding:12px;border-radius:12px;border:3px solid #1B5E20;background:#1B5E20;color:#fff;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(27,94,32,0.3);';
+      const BTN_IDLE_GREEN    = 'padding:12px;border-radius:12px;border:2px solid #1B5E20;background:#E8F5E9;color:#1B5E20;font-weight:800;font-size:13px;cursor:pointer;';
+      const BTN_ACTIVE_BLUE   = 'padding:12px;border-radius:12px;border:3px solid #1565C0;background:#1565C0;color:#fff;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(21,101,192,0.3);';
+      const BTN_IDLE_BLUE     = 'padding:12px;border-radius:12px;border:2px solid #1565C0;background:#E3F2FD;color:#1565C0;font-weight:800;font-size:13px;cursor:pointer;';
+      const BTN_ACTIVE_GRAY   = 'padding:12px;border-radius:12px;border:3px solid #333;background:#333;color:#fff;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+      const BTN_IDLE_GRAY     = 'padding:12px;border-radius:12px;border:2px solid #888;background:#f5f5f5;color:#333;font-weight:800;font-size:13px;cursor:pointer;';
+
+      const DSTYLE = 'flex:1;padding:8px 4px 8px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;min-width:0;';
+      const ICAL   = 'padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:16px;cursor:pointer;line-height:1;';
+
       overlay.innerHTML=`
         <div style="background:var(--surface);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px;">
-          <div style="font-weight:800;font-size:18px;margin-bottom:2px;">דוח תכנון מול ביצוע — תקופתי</div>
+          <div style="font-weight:800;font-size:18px;margin-bottom:2px;">📅 דוח תכנון מול ביצוע — תקופתי</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;">תכנון שחיטה מול שחיטה בפועל לפי משחטות</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-            <button onclick="this.closest('[data-pm]').dataset.sel='wk'"
-              style="padding:12px;border-radius:12px;border:2px solid #1B5E20;background:#E8F5E9;color:#1B5E20;font-weight:800;font-size:13px;cursor:pointer;">
-              השבוע<br><span style="font-size:10px;font-weight:500;">${fmt(weekStart)} – ${fmt(weekEnd)}</span></button>
-            <button onclick="this.closest('[data-pm]').dataset.sel='mo'"
-              style="padding:12px;border-radius:12px;border:2px solid #1565C0;background:#E3F2FD;color:#1565C0;font-weight:800;font-size:13px;cursor:pointer;">
-              החודש<br><span style="font-size:10px;font-weight:500;">${fmt(monthStart)} – ${fmt(monthEnd)}</span></button>
-            <button onclick="this.closest('[data-pm]').dataset.sel='pwk'"
-              style="padding:12px;border-radius:12px;border:2px solid #555;background:#f5f5f5;color:#333;font-weight:800;font-size:13px;cursor:pointer;">
-              שבוע שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevWS)} – ${fmt(prevWE)}</span></button>
-            <button onclick="this.closest('[data-pm]').dataset.sel='pmo'"
-              style="padding:12px;border-radius:12px;border:2px solid #555;background:#f5f5f5;color:#333;font-weight:800;font-size:13px;cursor:pointer;">
-              חודש שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevMS)} – ${fmt(prevME)}</span></button>
+            <button id="prBtnWk"  style="${BTN_ACTIVE_GREEN}">
+              📅 השבוע<br><span style="font-size:10px;font-weight:500;">${fmt(weekStart)} – ${fmt(weekEnd)}</span></button>
+            <button id="prBtnMo"  style="${BTN_IDLE_BLUE}">
+              🗓 החודש<br><span style="font-size:10px;font-weight:500;">${fmt(monthStart)} – ${fmt(monthEnd)}</span></button>
+            <button id="prBtnPwk" style="${BTN_IDLE_GRAY}">
+              ⬅️ שבוע שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevWS)} – ${fmt(prevWE)}</span></button>
+            <button id="prBtnPmo" style="${BTN_IDLE_GRAY}">
+              ⬅️ חודש שעבר<br><span style="font-size:10px;font-weight:500;">${fmt(prevMS)} – ${fmt(prevME)}</span></button>
           </div>
-          <div style="background:var(--bg);border-radius:12px;padding:10px 12px;border:1px solid var(--border);margin-bottom:12px;">
-            <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--text-secondary);">טווח מותאם:</div>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <input type="date" id="prFrom" value="${iso(weekStart)}" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
-              <span style="color:var(--text-secondary);">עד</span>
-              <input type="date" id="prTo" value="${today}" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
-              <button id="prCustomBtn" onclick="this.closest('[data-pm]').dataset.sel='custom';this.style.background='#1B5E20';this.style.color='#fff';this.style.borderColor='#1B5E20';"
-                style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#1B5E20;font-weight:800;font-size:14px;cursor:pointer;transition:all 0.2s;">✔</button>
+          <div id="prCustomBox" style="background:var(--bg);border-radius:12px;padding:10px 12px;border:2px solid var(--border);margin-bottom:12px;transition:border-color 0.2s;">
+            <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--text-secondary);">✏️ טווח מותאם:</div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;">
+              <button id="prCalFrom" style="${ICAL}" title="בחר תאריך התחלה">📅</button>
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
+                <input type="date" id="prFrom" value="${iso(weekStart)}" style="${DSTYLE}">
+                <span id="prFromLabel" style="font-size:10px;font-weight:800;color:#1B5E20;text-align:center;">${fmt(weekStart)}</span>
+              </div>
+              <span style="color:var(--text-secondary);white-space:nowrap;">עד</span>
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
+                <input type="date" id="prTo" value="${today}" style="${DSTYLE}">
+                <span id="prToLabel" style="font-size:10px;font-weight:800;color:#1B5E20;text-align:center;">${fmt(todayObj)}</span>
+              </div>
+              <button id="prCalTo" style="${ICAL}" title="בחר תאריך סיום">📅</button>
+              <button id="prConfirmCustom" style="padding:8px 12px;border-radius:8px;border:2px solid #ccc;background:#eee;color:#999;font-weight:800;font-size:14px;cursor:pointer;transition:all 0.2s;" title="אשר טווח מותאם" disabled>✔</button>
             </div>
           </div>
           <div style="display:flex;gap:10px;">
@@ -4522,12 +4358,100 @@ async function exportPeriodExcel() {
           </div>
         </div>`;
       document.body.appendChild(overlay);
+
       const ranges={wk:[iso(weekStart),iso(weekEnd)],mo:[iso(monthStart),iso(monthEnd)],pwk:[iso(prevWS),iso(prevWE)],pmo:[iso(prevMS),iso(prevME)]};
+
+      // Helper: set selected period button (visual feedback)
+      function _prSelectBtn(sel) {
+        overlay.dataset.sel = sel;
+        const map = {
+          prBtnWk:  { id:'prBtnWk',  active: BTN_ACTIVE_GREEN, idle: BTN_IDLE_GREEN  },
+          prBtnMo:  { id:'prBtnMo',  active: BTN_ACTIVE_BLUE,  idle: BTN_IDLE_BLUE   },
+          prBtnPwk: { id:'prBtnPwk', active: BTN_ACTIVE_GRAY,  idle: BTN_IDLE_GRAY   },
+          prBtnPmo: { id:'prBtnPmo', active: BTN_ACTIVE_GRAY,  idle: BTN_IDLE_GRAY   },
+        };
+        const selBtnId = sel === 'wk' ? 'prBtnWk' : sel === 'mo' ? 'prBtnMo' : sel === 'pwk' ? 'prBtnPwk' : sel === 'pmo' ? 'prBtnPmo' : null;
+        Object.values(map).forEach(({ id, active, idle }) => {
+          const el = document.getElementById(id);
+          if (el) el.style.cssText = id === selBtnId ? active : idle;
+        });
+        // Reset custom box border if not custom
+        const customBox = document.getElementById('prCustomBox');
+        if (customBox) customBox.style.borderColor = sel === 'custom' ? '#1B5E20' : 'var(--border)';
+        // Reset confirm button
+        const confirmBtn = document.getElementById('prConfirmCustom');
+        if (confirmBtn && sel !== 'custom') {
+          confirmBtn.disabled = true;
+          confirmBtn.style.cssText = 'padding:8px 12px;border-radius:8px;border:2px solid #ccc;background:#eee;color:#999;font-weight:800;font-size:14px;cursor:pointer;transition:all 0.2s;';
+        }
+      }
+
+      // Period buttons
+      document.getElementById('prBtnWk').onclick  = () => _prSelectBtn('wk');
+      document.getElementById('prBtnMo').onclick  = () => _prSelectBtn('mo');
+      document.getElementById('prBtnPwk').onclick = () => _prSelectBtn('pwk');
+      document.getElementById('prBtnPmo').onclick = () => _prSelectBtn('pmo');
+
+      // Clickable calendar icons → open date picker
+      document.getElementById('prCalFrom').onclick = (e) => {
+        e.preventDefault();
+        const inp = document.getElementById('prFrom');
+        try { inp.showPicker?.(); } catch(_) { inp.focus(); inp.click(); }
+      };
+      document.getElementById('prCalTo').onclick = (e) => {
+        e.preventDefault();
+        const inp = document.getElementById('prTo');
+        try { inp.showPicker?.(); } catch(_) { inp.focus(); inp.click(); }
+      };
+
+      // When user changes dates → activate ✔ confirm button
+      function _onDateChange() {
+        const confirmBtn = document.getElementById('prConfirmCustom');
+        const customBox  = document.getElementById('prCustomBox');
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.style.cssText = 'padding:8px 12px;border-radius:8px;border:none;background:#1B5E20;color:#fff;font-weight:800;font-size:14px;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 6px rgba(27,94,32,0.3);';
+        }
+        if (customBox) customBox.style.borderColor = '#1B5E20';
+        // Update DD/MM/YYYY labels
+        const fromVal = document.getElementById('prFrom')?.value;
+        const toVal   = document.getElementById('prTo')?.value;
+        const fromLbl = document.getElementById('prFromLabel');
+        const toLbl   = document.getElementById('prToLabel');
+        if (fromLbl && fromVal) fromLbl.textContent = isoToDisplay(fromVal);
+        if (toLbl   && toVal)   toLbl.textContent   = isoToDisplay(toVal);
+      }
+      document.getElementById('prFrom').onchange = _onDateChange;
+      document.getElementById('prTo').onchange   = _onDateChange;
+
+      // ✔ confirm custom range
+      document.getElementById('prConfirmCustom').onclick = () => {
+        const s = document.getElementById('prFrom').value;
+        const e = document.getElementById('prTo').value;
+        if (s && e) {
+          overlay.dataset.sel = 'custom';
+          // Deselect all period buttons
+          ['prBtnWk','prBtnMo','prBtnPwk','prBtnPmo'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+              if (id === 'prBtnWk') el.style.cssText = BTN_IDLE_GREEN;
+              else if (id === 'prBtnMo') el.style.cssText = BTN_IDLE_BLUE;
+              else el.style.cssText = BTN_IDLE_GRAY;
+            }
+          });
+          // Visual confirmation
+          const cb = document.getElementById('prCustomBox');
+          if (cb) cb.style.borderColor = '#1B5E20';
+          toast('✔ טווח מותאם נבחר');
+        }
+      };
+
       document.getElementById('prOk').onclick=()=>{
         const sel=overlay.dataset.sel;
         let s,e;
         if(sel==='custom'){s=document.getElementById('prFrom').value;e=document.getElementById('prTo').value;}
         else if(ranges[sel]){[s,e]=ranges[sel];}else{[s,e]=ranges['wk'];}
+        if(!s||!e){toast('⚠️ יש לבחור תקופה'); return;}
         document.body.removeChild(overlay); resolve({start:s,end:e});
       };
       document.getElementById('prCancel').onclick=()=>{document.body.removeChild(overlay);resolve(null);};
@@ -4544,28 +4468,16 @@ async function exportPeriodExcel() {
       try {
         // שיווקים
         let cd=null;
-        try{const r=await fetch(gsUrl+'?type=shivukim');const d=await r.json();if(Array.isArray(d))cd=d;}catch(e){}
-        if(!cd){try{const r=await fetch(gsUrl);const d=await r.json();if(Array.isArray(d))cd=d;}catch(e){}}
+        try{const r=await fetch(cloudUrl('shivukim'));const d=await r.json();if(Array.isArray(d))cd=d;}catch(e){}
+        if(!cd){try{const r=await fetch(cloudUrl());const d=await r.json();if(Array.isArray(d))cd=d;}catch(e){}}
         if(cd){const ids=new Set(cd.map(r=>r.id));records=[...cd,...records.filter(r=>r.status==='pending'&&!ids.has(r.id))];localStorage.setItem('poultry_manager_data',JSON.stringify(records));}
-        // שחיטה בפועל + תכנון — use love.html apiGetAll mechanism (token-auth, Israel TZ)
-        try {
-          const lv = await apiGetAllLove();
-          if (lv && lv.ok) {
-            if (Array.isArray(lv.tochnit) && lv.tochnit.length) {
-              const n=aggregateLove(lv.tochnit); const lo=getPlan();
-              Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); savePlan(lo);
-            }
-            if (Array.isArray(lv.shchita) && lv.shchita.length) {
-              const n=aggregateLove(lv.shchita); const lo=getShchita();
-              Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);}); saveShchitaStorage(lo);
-            }
-          } else {
-            // fallback: type= endpoints
-            try{const d=await fetchCloudJson(gsUrl+'?type=shchita');if(d&&!d.error){const n=cloudArrayToNestedMap(getCloudRowsOrMap(d));const lo=getShchita();Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});saveShchitaStorage(lo);}}catch(e){}
-            try{const d=await fetchCloudJson(gsUrl+'?type=derishott');if(d&&!d.error){saveDerishotStorage({...getDerishott(),...cloudArrayToNestedMap(getCloudRowsOrMap(d))});}}catch(e){}
-            try{const d=await fetchCloudJson(gsUrl+'?type=tochnit');if(d&&!d.error){const n=cloudArrayToNestedMap(getCloudRowsOrMap(d));const lo=getPlan();Object.entries(n).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});savePlan(lo);}}catch(e){}
-          }
-        } catch(e) {}
+        // שחיטה בפועל
+        try{const r=await fetch(cloudUrl('shchita'));const d=await r.json();if(d&&!Array.isArray(d)&&!d.error){const lo=getShchita();Object.entries(d).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});saveShchitaStorage(lo);}}catch(e){}
+        // תכנון + דרישות
+        try{const r=await fetch(cloudUrl('derishott'));const d=await r.json();if(d&&!Array.isArray(d)&&!d.error){const lo=getDerishott();Object.entries(d).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});saveDerishotStorage(lo);}}catch(e){}
+        try{const r=await fetch(cloudUrl('tochnit'));const d=await r.json();if(d&&!Array.isArray(d)&&!d.error){const lo=getPlan();Object.entries(d).forEach(([dt,sl])=>{if(!lo[dt])lo[dt]={};Object.assign(lo[dt],sl);});savePlan(lo);}}catch(e){}
+        // חגים
+        try{const r=await fetch(cloudUrl('holidays'));const d=await r.json();if(d&&!Array.isArray(d)&&!d.error){const lo=getHolidays();Object.entries(d).forEach(([key,hd])=>{if(key.includes('|')&&hd?.isHoliday)lo[key]=hd;});saveHolidays(lo);}}catch(e){}
       } catch(e) {}
     }
 
@@ -4580,106 +4492,148 @@ async function exportPeriodExcel() {
     wb.creator = 'PoultryManager PRO';
 
     // ══════════════════════════════════════════════
-    // גיליון 1: סיכום תכנון מול ביצוע
+    // גיליון 1: סיכום — מדדי ביצוע מרכזיים + פירוט יומי
     // ══════════════════════════════════════════════
-    const ws1 = wb.addWorksheet('תכנון מול ביצוע', { views:[{rightToLeft:true, showGridLines:false}] });
-    ws1.pageSetup = { orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0 };
+    const wsS = wb.addWorksheet('סיכום', { views:[{ rightToLeft:true, showGridLines:false }] });
+    wsS.pageSetup = { orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0 };
+
+    // אגרגציה יומית: תכנון, שיווקים, ביצוע (=שחיטה אם קיים, אחרת שיווקים)
+    const dailyAgg = dailyRows.map(dr => {
+      let pl = 0, sv = 0, ex = 0;
+      slaughters.forEach(s => {
+        const dd = dr.bySlaughter[s] || { planned:0, shchita:0, shivukim:0 };
+        pl += dd.planned  || 0;
+        sv += dd.shivukim || 0;
+        ex += getEffectiveExecution(dd.shchita, dd.shivukim, s);
+      });
+      return { date: dr.date, plan: pl, shivukim: sv, exec: ex };
+    });
+    const workDays = dailyAgg.filter(d => d.plan > 0).length;
+    const metDays  = dailyAgg.filter(d => d.plan > 0 && d.exec / d.plan >= 1).length;
+    const sumPlan  = dailyAgg.reduce((a, d) => a + d.plan, 0);
+    const sumExec  = dailyAgg.reduce((a, d) => a + d.exec, 0);
+    const sumShiv  = dailyAgg.reduce((a, d) => a + d.shivukim, 0);
+    const sumDiff  = sumExec - sumPlan;
+    const sumPctEx = sumPlan > 0 ? sumExec / sumPlan : null;
 
     // כותרת
-    const totalCols = 6;
-    ws1.mergeCells(1,1,1,totalCols);
-    const hCell = ws1.getCell('A1');
-    hCell.value = `תכנון שחיטות מול ביצוע — ${periodLabel}`;
-    hCell.font = { size:18, bold:true, color:{argb:'FFFFFFFF'} };
-    hCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1B5E20'} };
-    hCell.alignment = { horizontal:'center', vertical:'middle' };
-    ws1.getRow(1).height = 34;
+    wsS.mergeCells(1,1,1,7);
+    const sT = wsS.getCell(1,1);
+    sT.value = `סיכום תכנון מול ביצוע — ${periodLabel}`;
+    sT.font = { size:18, bold:true, color:{argb:'FFFFFFFF'} };
+    sT.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1B5E20'} };
+    sT.alignment = { horizontal:'center', vertical:'middle' };
+    wsS.getRow(1).height = 34;
+    wsS.mergeCells(2,1,2,7);
+    const sT2 = wsS.getCell(2,1);
+    sT2.value = `הופק: ${new Date().toLocaleString('he-IL')} | ${dates.length} ימים בטווח | ביצוע = שחיטה בפועל (אם הוזנה) אחרת שיווקים | מסלק אל קודס + חוסם + מזדמנות = "כללי"`;
+    sT2.font = { italic:true, size:10, color:{argb:'FF555555'} };
+    sT2.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFE8F5E9'} };
+    sT2.alignment = { horizontal:'center' };
+    wsS.getRow(2).height = 18;
 
-    ws1.mergeCells(2,1,2,totalCols);
-    const h2 = ws1.getCell('A2');
-    h2.value = `הופק: ${new Date().toLocaleString('he-IL')} | ${dates.length} ימים בטווח | % ביצוע = שחיטה בפועל בלבד`;
-    h2.font = { italic:true, size:11, color:{argb:'FF444444'} };
-    h2.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFE8F5E9'} };
-    h2.alignment = { horizontal:'center' };
-    ws1.getRow(2).height = 18;
+    // בלוק מדדי ביצוע מרכזיים
+    const pctRound = totPct => totPct === null ? '' : `${Math.round((totPct - 1) * 1000) / 10}%`;
+    const kpis = [
+      ['ימי עבודה (עם תכנון)', workDays, 'FF1B5E20'],
+      ['ימים שעמדו ביעד (≥100%)', `${metDays} מתוך ${workDays}${workDays ? ` (${Math.round(metDays / workDays * 100)}%)` : ''}`, 'FF2E7D32'],
+      ['סה"כ תכנון', sumPlan, 'FF388E3C'],
+      ['סה"כ ביצוע', sumExec, 'FF1565C0'],
+      ['סטייה כוללת', `${sumDiff >= 0 ? '+' : ''}${formatNumber(sumDiff)}${sumPctEx !== null ? ` (${sumDiff >= 0 ? '+' : ''}${pctRound(sumPctEx)})` : ''}`, sumDiff >= 0 ? 'FF2E7D32' : 'FFC62828'],
+    ];
+    let kr = 4;
+    kpis.forEach(([label, val, color]) => {
+      wsS.mergeCells(kr,1,kr,3);
+      const lc = wsS.getCell(kr,1);
+      lc.value = label; lc.font = { bold:true, size:12, color:{argb:'FFFFFFFF'} };
+      lc.fill = { type:'pattern', pattern:'solid', fgColor:{argb:color} };
+      lc.alignment = { horizontal:'right', vertical:'middle' };
+      wsS.mergeCells(kr,4,kr,7);
+      const vc = wsS.getCell(kr,4);
+      vc.value = val;
+      if (typeof val === 'number') vc.numFmt = '#,##0';
+      vc.font = { bold:true, size:13, color:{argb:color} };
+      vc.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF3F8F3'} };
+      vc.alignment = { horizontal:'center', vertical:'middle' };
+      wsS.getRow(kr).height = 22;
+      kr++;
+    });
 
-    // כותרות עמודות
-    const headers = ['משחטה', 'תכנון', 'שחיטה בפועל', 'שיווקים', '% ביצוע', 'הפרש'];
-    const hRow = ws1.getRow(4);
-    hRow.values = headers;
-    hRow.eachCell((cell, col) => {
-      if (col > 6) return;
-      cell.font = { bold:true, color:{argb:'FFFFFFFF'}, size:12 };
-      const colors = ['FF1B5E20','FF2E7D32','FF1565C0','FF546E7A','FF6A1B9A','FFC62828'];
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: colors[col-1]||'FF1B5E20'} };
+    // כותרות הטבלה היומית
+    const dhRow = kr + 1;
+    const dHeaders = ['תאריך','תכנון','שיווקים','ביצוע (שחיטה)','הפרש','% הפרש','אחוז ביצוע'];
+    const hColors  = ['FF1B5E20','FF388E3C','FF546E7A','FF1565C0','FF6A1B9A','FF6A1B9A','FF2E7D32'];
+    const hr = wsS.getRow(dhRow);
+    hr.values = dHeaders; hr.height = 24;
+    hr.eachCell((cell, col) => { if (col > 7) return;
+      cell.font = { bold:true, color:{argb:'FFFFFFFF'}, size:11 };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:hColors[col-1]} };
       cell.alignment = { horizontal:'center', vertical:'middle' };
       cell.border = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} };
     });
-    ws1.getRow(4).height = 26;
 
-    // שורות נתונים
-    let cr = 5;
-    slaughters.forEach((s, i) => {
-      const d = bySlaughter[s];
-      const effective = d.effective || getEffectivePerformanceQty(d.shchita, d.shivukim);
-      const pct = d.planned > 0 ? effective / d.planned : null;
-      const diff = d.planned > 0 ? effective - d.planned : null;
-      const pctColor = pct===null?'FF999999':pct>=1?'FF2E7D32':pct>=0.7?'FFF57F17':'FFC62828';
-      const rowBg = i%2===0 ? 'FFF9FCF9' : 'FFFFFFFF';
-
-      const row = ws1.getRow(cr++);
-      row.values = [s, d.planned||'—', d.shchita>0?d.shchita:'—', d.shivukim||0, pct, diff];
-      row.height = 24;
-      row.getCell(1).font = { bold:true };
-      row.getCell(1).alignment = { horizontal:'right' };
-      if (d.planned>0)   { row.getCell(2).numFmt='#,##0'; }
-      if (d.shchita>0)   { row.getCell(3).numFmt='#,##0'; row.getCell(3).font={bold:true,color:{argb:'FF1565C0'}}; }
-      row.getCell(4).numFmt='#,##0'; row.getCell(4).font={bold:true,color:{argb:'FF546E7A'}};
-      if (pct!==null)    { row.getCell(5).numFmt='0%'; row.getCell(5).font={bold:true,color:{argb:pctColor}}; }
-      if (diff!==null)   { row.getCell(6).numFmt='+#,##0;-#,##0;0'; row.getCell(6).font={bold:true,color:{argb:diff>=0?'FF2E7D32':'FFC62828'}}; }
-      row.eachCell((cell,col)=>{ if(col<=6){ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:rowBg}}; cell.border={top:{style:'thin',color:{argb:'FFD6E2D9'}},left:{style:'thin',color:{argb:'FFD6E2D9'}},bottom:{style:'thin',color:{argb:'FFD6E2D9'}},right:{style:'thin',color:{argb:'FFD6E2D9'}}}; cell.alignment={horizontal:'center',vertical:'middle'}; } });
-      row.getCell(1).alignment={horizontal:'right',vertical:'middle'};
+    // שורות יומיות
+    let dr2 = dhRow + 1;
+    dailyAgg.forEach((d, idx) => {
+      const dObj = new Date(d.date);
+      const dayName = DAYS_HE[dObj.getDay()];
+      const dateStr = `${d.date.split('-')[2]}/${d.date.split('-')[1]} ${dayName}`;
+      const diff    = d.plan > 0 ? d.exec - d.plan : null;
+      const pctDiff = d.plan > 0 ? (d.exec - d.plan) / d.plan : null;
+      const pctExec = d.plan > 0 ? d.exec / d.plan : null;
+      const row = wsS.getRow(dr2++);
+      row.values = [dateStr, d.plan || '', d.shivukim || '', d.exec || '', diff === null ? '' : diff, pctDiff === null ? '' : pctDiff, pctExec === null ? '' : pctExec];
+      const isSat = dObj.getDay() === 6;
+      const bg = isSat ? 'FFFFF3E0' : idx % 2 === 0 ? 'FFF9FCF9' : 'FFFFFFFF';
+      row.eachCell((cell, col) => { if (col > 7) return;
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+        cell.alignment = { horizontal:'center', vertical:'middle' };
+        cell.border = { top:{style:'thin',color:{argb:'FFE0E8E0'}}, left:{style:'thin',color:{argb:'FFE0E8E0'}}, bottom:{style:'thin',color:{argb:'FFE0E8E0'}}, right:{style:'thin',color:{argb:'FFE0E8E0'}} };
+        if ((col === 2 || col === 3 || col === 4) && typeof cell.value === 'number') cell.numFmt = '#,##0';
+        if (col === 5 && typeof cell.value === 'number') { cell.numFmt = '+#,##0;-#,##0;0'; cell.font = { bold:true, color:{argb:cell.value >= 0 ? 'FF2E7D32' : 'FFC62828'} }; }
+        if (col === 6 && typeof cell.value === 'number') { cell.numFmt = '+0.0%;-0.0%;0%'; cell.font = { color:{argb:cell.value >= 0 ? 'FF2E7D32' : 'FFC62828'} }; }
+        if (col === 7 && typeof cell.value === 'number') { cell.numFmt = '0.0%'; cell.font = { bold:true, color:{argb:cell.value >= 1 ? 'FF2E7D32' : cell.value >= 0.9 ? 'FFF57F17' : 'FFC62828'} }; }
+      });
+      row.getCell(1).font = { bold:isSat, color:{argb:isSat ? 'FFE65100' : 'FF333333'} };
+      if (typeof row.getCell(4).value === 'number') row.getCell(4).font = { bold:true, color:{argb:'FF1565C0'} };
     });
 
     // שורת סה"כ
-    ws1.addRow([]);
-    const totEffective = totals.effective || getEffectivePerformanceQty(totals.shchita, totals.shivukim);
-    const totPct = totals.planned>0?totEffective/totals.planned:null;
-    const totDiff= totals.planned>0?totEffective-totals.planned:null;
-    const totRow = ws1.getRow(cr+1);
-    totRow.values = ['סה"כ', totals.planned||'—', totals.shchita>0?totals.shchita:'—', totals.shivukim||0, totPct, totDiff];
-    totRow.height = 28;
-    totRow.eachCell((cell,col)=>{
-      if(col>6)return;
-      cell.font={bold:true,size:13,color:{argb:'FFFFFFFF'}};
-      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:col===3?'FF1565C0':'FF1B5E20'}};
-      cell.alignment={horizontal:'center',vertical:'middle'};
-      cell.border={top:{style:'medium'},left:{style:'thin'},bottom:{style:'medium'},right:{style:'thin'}};
+    const trow = wsS.getRow(dr2++);
+    const tDiff    = sumExec - sumPlan;
+    const tPctDiff = sumPlan > 0 ? (sumExec - sumPlan) / sumPlan : null;
+    const tPctExec = sumPlan > 0 ? sumExec / sumPlan : null;
+    trow.values = ['סה"כ', sumPlan || '', sumShiv || '', sumExec || '', tDiff, tPctDiff === null ? '' : tPctDiff, tPctExec === null ? '' : tPctExec];
+    trow.height = 26;
+    trow.eachCell((cell, col) => { if (col > 7) return;
+      cell.font = { bold:true, size:12, color:{argb:'FFFFFFFF'} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1B5E20'} };
+      cell.alignment = { horizontal:'center', vertical:'middle' };
+      cell.border = { top:{style:'medium'}, bottom:{style:'medium'} };
+      if (col >= 2 && col <= 4 && typeof cell.value === 'number') cell.numFmt = '#,##0';
+      if (col === 5 && typeof cell.value === 'number') cell.numFmt = '+#,##0;-#,##0;0';
+      if (col === 6 && typeof cell.value === 'number') cell.numFmt = '+0.0%;-0.0%;0%';
+      if (col === 7 && typeof cell.value === 'number') cell.numFmt = '0.0%';
     });
-    if(totals.planned>0)   totRow.getCell(2).numFmt='#,##0';
-    if(totals.shchita>0)   totRow.getCell(3).numFmt='#,##0';
-    totRow.getCell(4).numFmt='#,##0';
-    if(totPct!==null)      totRow.getCell(5).numFmt='0%';
-    if(totDiff!==null)     totRow.getCell(6).numFmt='+#,##0;-#,##0;0';
-
-    // הוספת גרף
-    const chartSvg = buildPlanVsActualChartSvg(slaughters, bySlaughter, periodLabel);
-    const chartPng = chartSvg ? await svgToPngDataUrl(chartSvg) : null;
-    if (chartPng) {
-      const imgId = wb.addImage({ base64:chartPng, extension:'png' });
-      ws1.addImage(imgId, { tl:{col:0, row:cr+3}, ext:{width:720, height:Math.max(200, 80+slaughters.length*70)} });
-    }
 
     // רוחב עמודות
-    [22,14,18,14,12,14].forEach((w,i)=>ws1.getColumn(i+1).width=w);
+    [16,14,14,16,12,10,12].forEach((w, i) => wsS.getColumn(i+1).width = w);
+
+    // גרף מתחת לטבלה (תכנון מול ביצוע לפי משחטה)
+    const sChartSvg = buildPlanVsActualChartSvg(slaughters, bySlaughter, periodLabel);
+    const sChartPng = sChartSvg ? await svgToPngDataUrl(sChartSvg) : null;
+    if (sChartPng) {
+      const sImgId = wb.addImage({ base64:sChartPng, extension:'png' });
+      wsS.addImage(sImgId, { tl:{ col:0, row:dr2 + 1 }, ext:{ width:720, height:Math.max(200, 80 + slaughters.length * 70) } });
+    }
 
     // ══════════════════════════════════════════════
-    // גיליון 2: מטריצה יומית (ימים × משחטות)
+    // גיליון 2: פירוט יומי — מטריצה (ימים × משחטות)
     // ══════════════════════════════════════════════
     const ws2 = wb.addWorksheet('פירוט יומי', { views:[{rightToLeft:true, state:'frozen', xSplit:1, ySplit:3}] });
     ws2.pageSetup = { orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0 };
 
-    const colsNeeded = 1 + slaughters.length * 2 + 2; // תאריך + (תכנון+ביצוע)×n + (תכנון+ביצוע) סה"כ יומי
+    const colsNeeded = 1 + slaughters.length * 2 + 3; // תאריך + (תכנון+ביצוע)×n + סה"כ תכנון + סה"כ ביצוע + סה"כ יומי
     ws2.mergeCells(1,1,1,colsNeeded);
     const h2t = ws2.getCell(1,1);
     h2t.value = `פירוט יומי — תכנון מול שחיטה בפועל | ${periodLabel}`;
@@ -4698,9 +4652,12 @@ async function exportPeriodExcel() {
       cell.alignment={horizontal:'center',vertical:'middle'};
       ci+=2;
     });
-    ws2.mergeCells(2,ci,2,ci+1);
+    ws2.mergeCells(2,ci,2,ci);
     const totHeader=ws2.getCell(2,ci);
-    totHeader.value='סה"כ יומי'; totHeader.font={bold:true,color:{argb:'FFFFFFFF'}}; totHeader.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1B5E20'}}; totHeader.alignment={horizontal:'center',vertical:'middle'};
+    totHeader.value='סה"כ תכנון'; totHeader.font={bold:true,color:{argb:'FFFFFFFF'}}; totHeader.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2E7D32'}}; totHeader.alignment={horizontal:'center'};
+    ws2.mergeCells(2,ci+1,2,ci+1);
+    const totBitzuaHeader=ws2.getCell(2,ci+1);
+    totBitzuaHeader.value='סה"כ ביצוע'; totBitzuaHeader.font={bold:true,color:{argb:'FFFFFFFF'}}; totBitzuaHeader.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1565C0'}}; totBitzuaHeader.alignment={horizontal:'center'};
     ws2.getRow(2).height=22;
 
     // Row 3: sub-headers (תכנון / ביצוע per slaughterhouse)
@@ -4718,46 +4675,42 @@ async function exportPeriodExcel() {
       });
       ci+=2;
     });
-    ['תכנון','ביצוע'].forEach((label,j)=>{
-      const cell=ws2.getCell(3,ci+j);
-      cell.value=label; cell.font={bold:true,color:{argb:'FFFFFFFF'},size:10};
-      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:j===0?'FF2E7D32':'FF0D47A1'}};
-      cell.alignment={horizontal:'center'};
-    });
+    ws2.getCell(3,ci).value='סה"כ תכנון'; ws2.getCell(3,ci).font={bold:true,color:{argb:'FFFFFFFF'}}; ws2.getCell(3,ci).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF388E3C'}}; ws2.getCell(3,ci).alignment={horizontal:'center'};
+    ws2.getCell(3,ci+1).value='סה"כ ביצוע'; ws2.getCell(3,ci+1).font={bold:true,color:{argb:'FFFFFFFF'}}; ws2.getCell(3,ci+1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1565C0'}}; ws2.getCell(3,ci+1).alignment={horizontal:'center'};
     ws2.getRow(3).height=20;
 
     // Data rows
     let r4 = 4;
     dailyRows.forEach((dayRow, idx) => {
-      const d = parseIsoDateLocal(dayRow.date) || new Date(dayRow.date);
+      const d = new Date(dayRow.date);
       const dayName = DAYS_HE[d.getDay()];
       const dateStr = `${dayRow.date.split('-')[2]}/${dayRow.date.split('-')[1]} ${dayName}`;
       const row = ws2.getRow(r4++);
       const vals = [dateStr];
       let dayTotalEffective=0, dayTotalPlan=0;
       slaughters.forEach(s=>{
-        const sd=dayRow.bySlaughter[s]||{planned:0,shchita:0,shivukim:0,effective:0};
-        const eff=sd.effective||getEffectivePerformanceQty(sd.shchita,sd.shivukim);
+        const sd=dayRow.bySlaughter[s]||{planned:0,shchita:0,shivukim:0};
+        const eff = getEffectiveExecution(sd.shchita, sd.shivukim, s);
         vals.push(sd.planned||''); vals.push(eff||'');
         dayTotalPlan+=sd.planned; dayTotalEffective+=eff;
       });
-      vals.push(dayTotalPlan||''); vals.push(dayTotalEffective||'');
+      vals.push(dayTotalPlan||'');    // סה"כ תכנון
+      vals.push(dayTotalEffective||''); // סה"כ ביצוע
       row.values=vals;
       const isToday=dayRow.date===getSafeIsoDate();
       const isSat=d.getDay()===6;
       const rowBg=isToday?'FFE8F5E9':isSat?'FFFFF3E0':idx%2===0?'FFF9FCF9':'FFFFFFFF';
-      const lastPlanCol = colsNeeded-1;
-      const lastEffCol = colsNeeded;
+      const nCols = 1 + slaughters.length*2 + 2;
       row.eachCell((cell,col)=>{
         cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:rowBg}};
         cell.alignment={horizontal:'center',vertical:'middle'};
         cell.border={top:{style:'thin',color:{argb:'FFD6E2D9'}},left:{style:'thin',color:{argb:'FFD6E2D9'}},bottom:{style:'thin',color:{argb:'FFD6E2D9'}},right:{style:'thin',color:{argb:'FFD6E2D9'}}};
         if(typeof cell.value==='number') cell.numFmt='#,##0';
-        // Color ביצוע columns blue (per-slaughter)
+        // Color ביצוע columns blue
         if(col>1&&col<=1+slaughters.length*2&&(col-1)%2===0) { if(cell.value>0) cell.font={bold:true,color:{argb:'FF1565C0'}}; }
-        // Bold daily totals
-        if(col===lastPlanCol && cell.value>0) cell.font={bold:true,color:{argb:'FF2E7D32'}};
-        if(col===lastEffCol && cell.value>0) cell.font={bold:true,color:{argb:'FF0D47A1'}};
+        // Color סה"כ תכנון green, סה"כ ביצוע blue
+        if(col===nCols-1&&cell.value>0) cell.font={bold:true,color:{argb:'FF2E7D32'}};
+        if(col===nCols&&cell.value>0)   cell.font={bold:true,color:{argb:'FF1565C0'}};
       });
       row.getCell(1).font={bold:isToday,color:{argb:isToday?'FF1B5E20':isSat?'FFE65100':'FF333333'}};
     });
@@ -4765,23 +4718,22 @@ async function exportPeriodExcel() {
     // Totals row
     const totR=ws2.getRow(r4);
     const totVals=['סה"כ'];
-    let grandEff=0, grandPlan=0;
+    let grandPlan=0, grandEff=0;
     slaughters.forEach(s=>{
       totVals.push(bySlaughter[s].planned||'');
-      const eff=bySlaughter[s].effective||getEffectivePerformanceQty(bySlaughter[s].shchita,bySlaughter[s].shivukim);
-      totVals.push(eff||''); grandEff+=eff; grandPlan+=bySlaughter[s].planned||0;
+      const eff = bySlaughter[s].effective || 0; // סכום יומי של הביצוע (לא אגרגט של שחיטה/שיווקים)
+      totVals.push(eff||''); grandEff+=eff; grandPlan+=bySlaughter[s].planned;
     });
-    totVals.push(grandPlan||''); totVals.push(grandEff||'');
+    totVals.push(grandPlan||'');  // סה"כ תכנון
+    totVals.push(grandEff||'');   // סה"כ ביצוע
     totR.values=totVals; totR.height=26;
-    const lastPlanColT = colsNeeded-1;
-    const lastEffColT = colsNeeded;
     totR.eachCell((cell,col)=>{
+      const nCols2 = 1 + slaughters.length*2 + 2;
+      const isTihnunCol = col===nCols2-1;
+      const isBitzuaCol = col>1&&col<=1+slaughters.length*2&&(col-1)%2===0;
+      const isSumBitzua = col===nCols2;
       cell.font={bold:true,color:{argb:'FFFFFFFF'},size:12};
-      let bg='FF1B5E20';
-      if(col>1&&col<=1+slaughters.length*2&&(col-1)%2===0) bg='FF1565C0';
-      else if(col===lastPlanColT) bg='FF2E7D32';
-      else if(col===lastEffColT) bg='FF0D47A1';
-      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb: isBitzuaCol||isSumBitzua?'FF1565C0':isTihnunCol?'FF388E3C':'FF1B5E20'}};
       cell.alignment={horizontal:'center',vertical:'middle'};
       if(typeof cell.value==='number') cell.numFmt='#,##0';
     });
@@ -4789,7 +4741,8 @@ async function exportPeriodExcel() {
     // Column widths for ws2
     ws2.getColumn(1).width=14;
     ci=2; slaughters.forEach(()=>{ ws2.getColumn(ci).width=11; ws2.getColumn(ci+1).width=11; ci+=2; });
-    ws2.getColumn(ci).width=12; ws2.getColumn(ci+1).width=12;
+    ws2.getColumn(ci).width=14;   // סה"כ תכנון
+    ws2.getColumn(ci+1).width=14; // סה"כ ביצוע
 
     const buffer = await wb.xlsx.writeBuffer();
     downloadBlob(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
@@ -4810,9 +4763,7 @@ try {
   currentUser = loadAuthUser();
   applyAccessControl();
   if (!currentUser) showLoginOverlay();
-  const gsUrlInput = document.getElementById('gsUrl');
-  if (gsUrlInput) gsUrlInput.value = getGsUrl() || '';
-  renderCloudSourceBanner();
+  document.getElementById('gsUrl').value = getGsUrl();
   const autoSyncSel = document.getElementById('autoSyncSelect');
   if (autoSyncSel) autoSyncSel.value = String(settings.autoSyncMins || 0);
   renderTemplateChips();
@@ -4822,19 +4773,11 @@ try {
   populateSlaughterSelect('');
   initPlanYearSelect();
   initDerishotPanel();
-  initShchitaPanel();
-  const planGrid = document.getElementById('planDailyGrid');
-  if (planGrid && !planGrid.dataset.boundClick) {
-    planGrid.dataset.boundClick = '1';
-    planGrid.addEventListener('click', (e) => {
-      const cell = e.target.closest('[data-plan-date][data-plan-slaughter]');
-      if (!cell) return;
-      openPlanModal(cell.dataset.planDate, cell.dataset.planSlaughter);
-    });
-  }
   startAutoSync();
   switchTab(currentTab);
   render();
+  updatePendingBadge();
+  fetchUsers();  // подгрузить пользователей из таблицы (и восстановить сессию динамического юзера)
   if (settings.pin) showPinOverlay();
 
   // ── Cloud-first: show loading overlay, pull all data, then continue ──
@@ -4845,121 +4788,28 @@ try {
     try {
       // שיווקים
       let cloudData = null;
-      try { const d=await fetchCloudJson(url+'?type=shivukim'); if(Array.isArray(d)) cloudData=d; } catch(e){}
-      if (!cloudData) { try { const d=await fetchCloudJson(url); if(Array.isArray(d)) cloudData=d; } catch(e){}
-
-        // If still no data, check if response was a non-array object
-        try {
-          const rawResp = await fetchCloudJson(url);
-          if (rawResp) {
-            dlog('Cloud response type:', typeof rawResp, Array.isArray(rawResp) ? 'ARRAY' : 'NOT ARRAY');
-            dlog('Cloud response keys:', Object.keys(rawResp).slice(0, 20).join(', '));
-            if (rawResp.data && Array.isArray(rawResp.data)) {
-              cloudData = rawResp.data;
-              dlog('Found data inside .data property:', cloudData.length, 'records');
-            } else if (rawResp.records && Array.isArray(rawResp.records)) {
-              cloudData = rawResp.records;
-              dlog('Found data inside .records property:', cloudData.length, 'records');
-            } else if (rawResp.shivukim && Array.isArray(rawResp.shivukim)) {
-              cloudData = rawResp.shivukim;
-              dlog('Found data inside .shivukim property:', cloudData.length, 'records');
-            } else {
-              // Show what we got so user can report
-              const sampleStr = JSON.stringify(rawResp).substring(0, 500);
-              console.error('Cloud returned unexpected format:', sampleStr);
-              alert('⚠️ ДИАГНОСТИКА: Облако вернуло данные, но не в формате массива.\n\nВот что пришло:\n' + sampleStr + '\n\nСкопируйте это и отправьте разработчику.');
-            }
-          }
-        } catch(e2) {
-          console.error('Cloud fetch failed completely:', e2);
-        }
-      }
-
+      try { const d=await fetchCloudJson(cloudUrl('shivukim')); if(Array.isArray(d)) cloudData=d; } catch(e){ throw e; }
+      if (!cloudData) { try { const d=await fetchCloudJson(cloudUrl()); if(Array.isArray(d)) cloudData=d; } catch(e){ throw e; } }
       if (cloudData) {
-        // ── Apply Hebrew→English field mapping ──
-        cloudData = cloudData.map(normalizeCloudRecord);
-
-        // Log first record structure for debugging
-        if (cloudData.length > 0) {
-          const first = cloudData[0];
-          dlog('Cloud data loaded:', cloudData.length, 'records');
-          dlog('First record:', JSON.stringify(first, null, 2));
-        }
-
         const ids = new Set(cloudData.map(r=>r.id));
         records = [...cloudData, ...records.filter(r=>r.status==='pending'&&!ids.has(r.id))];
         localStorage.setItem('poultry_manager_data', JSON.stringify(records));
-
-        // שיווק הם שיווק בלבד — תכנון ושחיטה נטענים רק מהגיליונות הייעודיים שלהם
-        dlog('Startup: shivukim loaded:', cloudData.length, 'records (no auto-fill to plan/shchita)');
       }
       // דרישות
       showCloudOverlay('טוען דרישות יומיות...');
-      try { const d=await fetchCloudJson(url+'?type=derishott'); if(d&&!d.error&&Object.keys(d).length>0){ const nested=cloudArrayToNestedMap(d); if(typeof nested==='object'&&Object.keys(nested).length>0){ const m={...getDerishott(),...nested}; saveDerishotStorage(m); } } } catch(e){}
-      // ── תכנון + שחיטה: love.html approach first (action=getall), then type= fallback ──
-      showCloudOverlay('טוען תוכנית ושחיטה...');
-      try {
-        // Primary: use love.html's proven getall mechanism (Israel-TZ, token-auth)
-        const loveData = await apiGetAllLove();
-        dlog('Startup apiGetAllLove:', loveData ? (loveData.ok ? 'ok' : 'error:'+loveData.error) : 'null');
-        if (loveData && loveData.ok) {
-          // ── tochnit from getall ──
-          if (Array.isArray(loveData.tochnit) && loveData.tochnit.length > 0) {
-            const nested = aggregateLove(loveData.tochnit);
-            dlog('Startup getall tochnit dates:', Object.keys(nested).length);
-            if (Object.keys(nested).length > 0) {
-              const lo = getPlan();
-              Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
-              savePlan(lo);
-            }
-          }
-          // ── shchita from getall ──
-          if (Array.isArray(loveData.shchita) && loveData.shchita.length > 0) {
-            const nested = aggregateLove(loveData.shchita);
-            dlog('Startup getall shchita dates:', Object.keys(nested).length);
-            if (Object.keys(nested).length > 0) {
-              const lo = getShchita();
-              Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
-              saveShchitaStorage(lo);
-            }
-          }
-        } else {
-          // Fallback: type= based endpoints (production URL)
-          dlog('Startup: falling back to type= endpoints');
-          try {
-            const d = await fetchCloudJson(url+'?type=tochnit');
-            dlog('Startup tochnit raw:', JSON.stringify(d).substring(0,200));
-            if(d && !d.error) {
-              const arr = getCloudRowsOrMap(d);
-              const nested = cloudArrayToNestedMap(arr);
-              dlog('Startup tochnit nested dates:', Object.keys(nested).length);
-              if(Object.keys(nested).length > 0) {
-                const lo = getPlan();
-                Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
-                savePlan(lo);
-              }
-            }
-          } catch(e){ dwarn('Startup tochnit error:', e); }
-          try {
-            const d = await fetchCloudJson(url+'?type=shchita');
-            dlog('Startup shchita raw:', JSON.stringify(d).substring(0,200));
-            if(d && !d.error) {
-              const arr = getCloudRowsOrMap(d);
-              const nested = cloudArrayToNestedMap(arr);
-              dlog('Startup shchita nested dates:', Object.keys(nested).length);
-              if(Object.keys(nested).length > 0) {
-                const lo = getShchita();
-                Object.entries(nested).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); });
-                saveShchitaStorage(lo);
-              }
-            }
-          } catch(e){ dwarn('Startup shchita error:', e); }
-        }
-      } catch(e){ dwarn('Startup tochnit/shchita error:', e); }
+      try { const r=await fetch(cloudUrl('derishott')); const d=await r.json(); if(d&&!Array.isArray(d)&&!d.error){ const lo=getDerishott(); Object.entries(d).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); }); saveDerishotStorage(lo); } } catch(e){}
+      // תכנון
+      try { const r=await fetch(cloudUrl('tochnit')); const d=await r.json(); if(d&&!Array.isArray(d)&&!d.error){ const lo=getPlan(); Object.entries(d).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); }); savePlan(lo); } } catch(e){}
+      // חגים
+      try { const r=await fetch(cloudUrl('holidays')); const d=await r.json(); if(d&&!Array.isArray(d)&&!d.error){ const lo=getHolidays(); Object.entries(d).forEach(([key,hd])=>{ if(key.includes('|')&&hd?.isHoliday) lo[key]=hd; }); saveHolidays(lo); } } catch(e){}
+      // שחיטה בפועל
+      showCloudOverlay('טוען שחיטה בפועל...');
+      try { const r=await fetch(cloudUrl('shchita')); const d=await r.json(); if(d&&!Array.isArray(d)&&!d.error){ const lo=getShchita(); Object.entries(d).forEach(([dt,sl])=>{ if(!lo[dt]) lo[dt]={}; Object.assign(lo[dt],sl); }); saveShchitaStorage(lo); } } catch(e){}
       render();
       if (document.getElementById('planDailyGrid')) renderPlanView();
       if (document.getElementById('derishotGrid')) renderDerishotGrid();
       toast(`✅ הנתונים עודכנו מהענן`);
+      flushSyncQueue();  // досинхронизировать зависшие записи
     } catch(e) {
       console.error('Cloud startup error', e);
       alert(e.message || 'Cloud load failed');
@@ -5006,17 +4856,6 @@ try {
     </div>
   </div>
 </div>
-
-<button id="shchitaFab"
-  onclick="openShchitaModal()"
-  style="display:none; position:fixed; bottom:80px; left:16px; z-index:900;
-         background:linear-gradient(135deg,#1565C0,#1976D2);
-         color:#fff; border:none; border-radius:50px;
-         padding:13px 18px; font-size:13px; font-weight:800;
-         box-shadow:0 4px 16px rgba(21,101,192,0.5);
-         cursor:pointer; white-space:nowrap; align-items:center; gap:7px;">
-  ✅ שחיטה בפועל
-</button>
 
 <div id="cloudLoadOverlay" style="display:none; position:fixed; inset:0; z-index:5000; background:linear-gradient(135deg,#1B5E20,#2E7D32); flex-direction:column; align-items:center; justify-content:center; gap:18px;">
   <div id="cloudLoadLogo" style="width:72px; height:72px; background:#fff; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:36px; box-shadow:0 4px 20px rgba(0,0,0,0.3);">🐔</div>
